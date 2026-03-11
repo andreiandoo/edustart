@@ -421,7 +421,7 @@ $toast_msg = isset($_GET['msg']) ? sanitize_text_field(wp_unslash($_GET['msg']))
                   <?php echo $dt ? esc_html(mysql2date(get_option('date_format').' '.get_option('time_format'), $dt)) : '—'; ?>
                 </td>
                 <td class="px-5 py-3 text-right">
-                  <a href="<?php echo esc_url(home_url('/panou/raport/elev/'.$r->id)); ?>"
+                  <a href="<?php echo esc_url(home_url('/panou/raport/elev/'.$r->student_id)); ?>"
                      class="inline-flex items-center gap-1.5 text-slate-700 hover:text-slate-900 underline-offset-4 hover:underline">
                     Deschide
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">

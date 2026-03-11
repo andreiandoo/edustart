@@ -24,6 +24,12 @@ get_header('blank'); ?>
         <p class="mt-2 text-sm text-gray-600">Folosește datele contului tău pentru a te loga pe platforma EduStart.</p>
       </div>
 
+      <?php if (!empty($_GET['password']) && $_GET['password'] === 'changed'): ?>
+        <div class="p-3 text-sm text-center text-emerald-800 bg-emerald-50 rounded-lg border border-emerald-200">
+          Parola a fost setata cu succes. Te poti autentifica acum.
+        </div>
+      <?php endif; ?>
+
       <!-- Form login -->
       <form method="post" action="<?php echo wp_login_url( home_url('/panou') ); ?>" class="space-y-4">
         <div>

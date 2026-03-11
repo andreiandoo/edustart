@@ -328,6 +328,7 @@ foreach (['t0','t1'] as $st) {
   $gen_lit_stage[$st]['completion_avg'] = $cnt_cmpl ? ($sum_cmpl / $cnt_cmpl) : null;
   $gen_lit_stage[$st]['total_pct_avg']  = $cnt_total ? ($sum_total_pct / $cnt_total) : null;
   $gen_lit_stage[$st]['remedial_rate']  = $rem_all ? (100.0 * $rem_yes / $rem_all) : null;
+  $gen_lit_stage[$st]['remedial_count'] = $rem_yes;
 
   // remedial agregat: puncte & % ponderat (sum(points)/sum(max))
   $gen_lit_stage[$st]['remedial_points_sum'] = $rem_cnt ? $rem_points_sum : null;

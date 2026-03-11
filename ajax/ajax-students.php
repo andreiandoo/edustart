@@ -63,19 +63,26 @@ function edu_add_students() {
     foreach ($students as $row) {
         if (empty($row['first_name']) || empty($row['last_name'])) continue;
         $wpdb->insert($students_table, [
-            'class_id'   => $class_id,
-            'first_name' => sanitize_text_field($row['first_name']),
-            'last_name'  => sanitize_text_field($row['last_name']),
-            'age'        => intval($row['age'] ?? 0),
-            'gender'     => sanitize_text_field($row['gender'] ?? ''),
-            'observation' => sanitize_text_field($row['observation'] ?? ''),
-            'sit_abs'    => sanitize_text_field($row['sit_abs'] ?? ''),
-            'frecventa'  => sanitize_text_field($row['frecventa'] ?? ''),
-            'bursa'      => sanitize_text_field($row['bursa'] ?? ''),
-            'dif_limba'  => sanitize_text_field($row['dif_limba'] ?? ''),
-            'notes'      => sanitize_textarea_field($row['notes'] ?? ''),
+            'class_id'         => $class_id,
+            'first_name'       => sanitize_text_field($row['first_name']),
+            'last_name'        => sanitize_text_field($row['last_name']),
+            'age'              => intval($row['age'] ?? 0),
+            'gender'           => sanitize_text_field($row['gender'] ?? ''),
+            'sit_abs'          => sanitize_text_field($row['sit_abs'] ?? ''),
+            'frecventa'        => sanitize_text_field($row['frecventa'] ?? ''),
+            'bursa'            => sanitize_text_field($row['bursa'] ?? ''),
+            'dif_limba'        => sanitize_text_field($row['dif_limba'] ?? ''),
+            'cauze_abs'        => sanitize_textarea_field($row['cauze_abs'] ?? ''),
+            'risc_abandon'     => sanitize_text_field($row['risc_abandon'] ?? ''),
+            'repeta_clasa'     => sanitize_text_field($row['repeta_clasa'] ?? ''),
+            'observation'      => sanitize_text_field($row['observation'] ?? ''),
+            'alte_obs'         => sanitize_textarea_field($row['alte_obs'] ?? ''),
+            'demers_familie'   => sanitize_text_field($row['demers_familie'] ?? ''),
+            'demers_conducere' => sanitize_text_field($row['demers_conducere'] ?? ''),
+            'demers_consilier' => sanitize_text_field($row['demers_consilier'] ?? ''),
+            'notes'            => sanitize_textarea_field($row['notes'] ?? ''),
         ]);
-        if ($ok) {
+        if ($wpdb->insert_id) {
             $created_ids[] = (int) $wpdb->insert_id; // <— ID NOU
         }
     }

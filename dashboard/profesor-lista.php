@@ -601,11 +601,18 @@ get_header('blank'); ?>
                     <th class="p-3 font-semibold text-left border-b border-slate-700/70">Vârstă</th>
                     <th class="p-3 font-semibold text-left border-b border-slate-700/70">Gen</th>
                     <th class="p-3 font-semibold text-left border-b border-slate-700/70 class_label_th">Clasa</th>
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70">Observație</th>
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70">Absenteism</th>
+                    <th class="p-3 font-semibold text-left border-b border-slate-700/70">Sit. absenteism</th>
                     <th class="p-3 font-semibold text-left border-b border-slate-700/70 frecventa_th">Frecvență grădiniță</th>
                     <th class="p-3 font-semibold text-left border-b border-slate-700/70 bursa_th">Bursă socială</th>
                     <th class="p-3 font-semibold text-left border-b border-slate-700/70">Limba diferită</th>
+                    <th class="p-3 font-semibold text-left border-b border-slate-700/70 cauze_abs_th">Cauze absenteism</th>
+                    <th class="p-3 font-semibold text-left border-b border-slate-700/70 risc_abandon_th">Risc abandon</th>
+                    <th class="p-3 font-semibold text-left border-b border-slate-700/70">Repetă clasa</th>
+                    <th class="p-3 font-semibold text-left border-b border-slate-700/70">Observație</th>
+                    <th class="p-3 font-semibold text-left border-b border-slate-700/70">Alte observații</th>
+                    <th class="p-3 font-semibold text-left border-b border-slate-700/70 demers_familie_th">Demers familie</th>
+                    <th class="p-3 font-semibold text-left border-b border-slate-700/70 demers_conducere_th">Demers conducere</th>
+                    <th class="p-3 font-semibold text-left border-b border-slate-700/70 demers_consilier_th">Demers consilier</th>
                     <th class="p-3 font-semibold text-left border-b border-slate-700/70">Mențiuni</th>
                     <th class="p-3 font-semibold text-center border-b border-slate-700/70">Ștergere</th>
                   </tr>

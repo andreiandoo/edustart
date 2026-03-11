@@ -22,7 +22,7 @@ if (!function_exists('gen_pct_badge')) {
     elseif ($v >= 40) $cls = 'bg-yellow-100 text-yellow-800 ring-1 ring-yellow-200';
     else $cls = 'bg-rose-100 text-rose-800 ring-1 ring-rose-200';
     $pad = $size==='xl' ? 'px-3 py-1.5 text-base font-bold' : ($size==='sm' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-sm');
-    return '<span class="inline-flex items-center '.$pad.' rounded '.$cls.'">'.intval(round($v)).'%</span>';
+    return '<span class="inline-flex items-center '.$pad.' rounded '.$cls.'">'.number_format($v,2).'%</span>';
   }
 }
 if (!function_exists('gen_delta_chip')) {
@@ -42,7 +42,7 @@ if (!function_exists('gen_lit_color_badge')) {
     if     ($colorKey==='green')       $cls = 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200';
     elseif ($colorKey==='red')         $cls = 'bg-rose-100 text-rose-800 ring-1 ring-rose-200';
     elseif ($colorKey==='red-strong')  $cls = 'bg-rose-600 text-white';
-    $s  = ($val>0?'+':'').number_format($val,0);
+    $s  = ($val>0?'+':'').number_format($val,2);
     return '<span class="inline-flex items-center px-2 py-0.5 text-base font-semibold rounded '.$cls.'">'.$s.'</span>';
   }
 }
@@ -117,9 +117,13 @@ $pillcompp = ($dComp===null? null : ($dComp<0?'red':'green'));
           <span class="font-semibold"><?= intval($gen_lit_stage['t0']['students'] ?? 0) ?> / <?= intval($total_students ?? 0) ?></span>
         </div>
         <div class="flex items-center justify-between">
-          <span class="text-slate-500">Grad completare ~</span>
+          <span class="text-slate-500">Grad completare</span>
           <span class="font-semibold">
-            <?= isset($gen_lit_stage['t0']['completion_avg']) ? number_format($gen_lit_stage['t0']['completion_avg'], 2) . '%' : '—' ?>
+            <?php
+              $t0_students = intval($gen_lit_stage['t0']['students'] ?? 0);
+              $t0_total = intval($total_students ?? 0);
+              echo $t0_total > 0 ? number_format(($t0_students / $t0_total) * 100, 2) . '%' : '—';
+            ?>
           </span>
         </div>
         <div class="flex items-center justify-between">
@@ -131,7 +135,18 @@ $pillcompp = ($dComp===null? null : ($dComp<0?'red':'green'));
           <span class="font-semibold"><?= gen_lit_color_badge($comp0, $compColor0) ?></span>
         </div>
         <div class="flex items-center justify-between">
-          <span class="text-slate-500">Remedial</span>
+          <span class="text-slate-500">Elevi remedial</span>
+          <span class="font-semibold">
+            <?php
+              $t0_rem = intval($gen_lit_stage['t0']['remedial_count'] ?? 0);
+              $t0_eval = intval($gen_lit_stage['t0']['students'] ?? 0);
+              echo $t0_rem . ' / ' . $t0_eval;
+              if ($t0_eval > 0) echo ' · ' . number_format(($t0_rem / $t0_eval) * 100, 2) . '%';
+            ?>
+          </span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-slate-500">Remedial (puncte)</span>
           <span class="font-semibold">
             <?php
               $rp = $gen_lit_stage['t0']['remedial_points_sum'] ?? null;
@@ -163,9 +178,13 @@ $pillcompp = ($dComp===null? null : ($dComp<0?'red':'green'));
           <span class="font-semibold"><?= intval($gen_lit_stage['t1']['students'] ?? 0) ?> / <?= intval($total_students ?? 0) ?></span>
         </div>
         <div class="flex items-center justify-between">
-          <span class="text-slate-500">Grad completare ~</span>
+          <span class="text-slate-500">Grad completare</span>
           <span class="font-semibold">
-            <?= isset($gen_lit_stage['t1']['completion_avg']) ? number_format($gen_lit_stage['t1']['completion_avg'], 2) . '%' : '—' ?>
+            <?php
+              $t1_students = intval($gen_lit_stage['t1']['students'] ?? 0);
+              $t1_total = intval($total_students ?? 0);
+              echo $t1_total > 0 ? number_format(($t1_students / $t1_total) * 100, 2) . '%' : '—';
+            ?>
           </span>
         </div>
         <div class="flex items-center justify-between">
@@ -177,7 +196,18 @@ $pillcompp = ($dComp===null? null : ($dComp<0?'red':'green'));
           <span class="font-semibold"><?= gen_lit_color_badge($comp1, $compColor1) ?></span>
         </div>
         <div class="flex items-center justify-between">
-          <span class="text-slate-500">Remedial</span>
+          <span class="text-slate-500">Elevi remedial</span>
+          <span class="font-semibold">
+            <?php
+              $t1_rem = intval($gen_lit_stage['t1']['remedial_count'] ?? 0);
+              $t1_eval = intval($gen_lit_stage['t1']['students'] ?? 0);
+              echo $t1_rem . ' / ' . $t1_eval;
+              if ($t1_eval > 0) echo ' · ' . number_format(($t1_rem / $t1_eval) * 100, 2) . '%';
+            ?>
+          </span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-slate-500">Remedial (puncte)</span>
           <span class="font-semibold">
             <?php
               $rp1 = $gen_lit_stage['t1']['remedial_points_sum'] ?? null;
@@ -200,8 +230,15 @@ $pillcompp = ($dComp===null? null : ($dComp<0?'red':'green'));
         <div class="flex items-center justify-between">
           <span class="text-slate-500">Medie Completare</span>
           <div class="flex items-center font-semibold gap-x-2">
-            <span><?= gen_delta_chip($dCompl) ?></span>
-            <?= isset($gen_lit_completion_avg_overall_decimal) ? number_format($gen_lit_completion_avg_overall_decimal, 2).'%' : '—' ?>
+            <?php
+              $total_st = intval($total_students ?? 0);
+              $compl_t0_pct = ($total_st > 0 && isset($gen_lit_stage['t0']['students'])) ? (intval($gen_lit_stage['t0']['students']) / $total_st * 100) : null;
+              $compl_t1_pct = ($total_st > 0 && isset($gen_lit_stage['t1']['students'])) ? (intval($gen_lit_stage['t1']['students']) / $total_st * 100) : null;
+              $dComplNew = ($compl_t0_pct !== null && $compl_t1_pct !== null) ? ($compl_t1_pct - $compl_t0_pct) : null;
+              $avgComplNew = ($compl_t0_pct !== null && $compl_t1_pct !== null) ? (($compl_t0_pct + $compl_t1_pct) / 2) : ($compl_t0_pct ?? $compl_t1_pct);
+            ?>
+            <span><?= gen_delta_chip($dComplNew) ?></span>
+            <?= $avgComplNew !== null ? number_format($avgComplNew, 2).'%' : '—' ?>
           </div>
         </div>
 
@@ -266,8 +303,8 @@ $pillcompp = ($dComp===null? null : ($dComp<0?'red':'green'));
               $v0 = $row0['avg_raw'] ?? null;
               $v1 = $row1['avg_raw'] ?? null;
               $d  = ($v0!==null && $v1!==null) ? ($v1 - $v0) : null;
-              $t0 = ($v0!==null ? esc_html((string)intval(round($v0))) : '—');
-              $t1 = ($v1!==null ? esc_html((string)intval(round($v1))) : '—');
+              $t0 = ($v0!==null ? esc_html(number_format($v0, 2)) : '—');
+              $t1 = ($v1!==null ? esc_html(number_format($v1, 2)) : '—');
             }
         ?>
         <tr>
@@ -298,7 +335,7 @@ $pillcompp = ($dComp===null? null : ($dComp<0?'red':'green'));
 
 <?php if ($has_cond): ?>
 <section class="p-6 mt-4 mb-8 bg-white border rounded-2xl">
-  <h3 class="mb-2 text-lg font-semibold">LIT — Întrebări condiționale</h3>
+  <h3 class="mb-2 text-lg font-semibold">LIT — Rezultate evaluare emergenta / remedial</h3>
   <div class="overflow-x-auto">
     <table class="min-w-[820px] w-full text-sm">
       <thead>
@@ -438,31 +475,40 @@ foreach ($student_ids as $sid) {
     }
   }
 
-  $n_acc0  = rg_level_to_num_pp2($acc0);
-  $n_comp0 = rg_level_to_num_pp2($comp0);
-  $n_acc1  = rg_level_to_num_pp2($acc1);
-  $n_comp1 = rg_level_to_num_pp2($comp1);
+  // scala PP=−1, P=0 (ca în carduri)
+  $n_acc0  = edus_level_string_to_num($acc0);
+  $n_comp0 = edus_level_string_to_num($comp0);
+  $n_acc1  = edus_level_string_to_num($acc1);
+  $n_comp1 = edus_level_string_to_num($comp1);
+
+  // diferența nivel evaluat − nivel clasă
+  $cl = $student_map[$sid]['class_label'] ?? '';
+  $grade_num = edus_grade_number_from_classlabel($cl);
+  $class_value = max(0, min(8, ($grade_num >= 0 ? $grade_num : 0)));
+
+  $d_acc0  = ($n_acc0  !== null) ? ($n_acc0  - $class_value) : null;
+  $d_comp0 = ($n_comp0 !== null) ? ($n_comp0 - $class_value) : null;
+  $d_acc1  = ($n_acc1  !== null) ? ($n_acc1  - $class_value) : null;
+  $d_comp1 = ($n_comp1 !== null) ? ($n_comp1 - $class_value) : null;
 
   $rows_students[] = [
     'id'   => $sid,
     'name' => $student_map[$sid]['name'] ?? ('Elev #'.$sid),
     'class_label' => $student_map[$sid]['class_label'] ?? '—',
-    'acc0' => $n_acc0,  'comp0'=>$n_comp0,
-    'acc1' => $n_acc1,  'comp1'=>$n_comp1,
-    'd_acc'  => ($n_acc0!==null  && $n_acc1!==null)  ? ($n_acc1  - $n_acc0)  : null,
-    'd_comp' => ($n_comp0!==null && $n_comp1!==null) ? ($n_comp1 - $n_comp0) : null,
+    'acc0' => $d_acc0,  'comp0'=>$d_comp0,
+    'acc1' => $d_acc1,  'comp1'=>$d_comp1,
+    'd_acc'  => ($d_acc0!==null  && $d_acc1!==null)  ? ($d_acc1  - $d_acc0)  : null,
+    'd_comp' => ($d_comp0!==null && $d_comp1!==null) ? ($d_comp1 - $d_comp0) : null,
   ];
 }
 usort($rows_students, function($a,$b){ return strcasecmp($a['name'],$b['name']); });
 
-/* celulă colorată pentru valorile PP/P (roșu) vs 0+ (verde) */
+/* celulă colorată: diferență nivel evaluat − nivel clasă (negativ=roșu, 0+=verde) */
 $cell_level_label = function($val){
   if ($val===null) return '<span class="text-slate-400">—</span>';
-  $cls = ($val<=-1) ? 'bg-rose-100 text-rose-700 px-2 py-0.5 rounded'
+  $cls = ($val < 0) ? 'bg-rose-100 text-rose-700 px-2 py-0.5 rounded'
                     : 'bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded';
-  if ($val <= -2) $lab = 'PP';
-  elseif ($val == -1) $lab = 'P';
-  else $lab = (string)$val;
+  $lab = ($val > 0 ? '+' : '') . (string)$val;
   return '<span class="'.$cls.'">'.$lab.'</span>';
 };
 ?>
@@ -523,7 +569,7 @@ $cell_level_label = function($val){
     </table>
   </div>
   <p class="mt-2 text-xs text-slate-500">
-    Valorile pe scară folosesc: PP = <strong>−2</strong>, P = <strong>−1</strong>, apoi 0…5. Diferențele (Δ) sunt colorate verde/roșu/gri în funcție de semn.
+    Valorile reprezintă diferența între nivelul evaluat (PP=−1, P=0, apoi 1…4) și nivelul clasei. Negativ = <span class="text-rose-600 font-semibold">roșu</span>, zero sau pozitiv = <span class="text-emerald-600 font-semibold">verde</span>.
   </p>
 </section>
 

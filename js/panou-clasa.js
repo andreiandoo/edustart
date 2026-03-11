@@ -104,14 +104,7 @@ jQuery(function ($) {
           </select>
         </td>
         <td class="${td}">
-          <select name="students[${idx}][observation]" class="${baseSelect} obs-select">
-            <option value=""></option>
-            <option value="transfer">Transfer</option>
-            <option value="abandon">Abandon</option>
-          </select>
-        </td>
-        <td class="${td}">
-          <select name="students[${idx}][sit_abs]" class="${baseSelect}">
+          <select name="students[${idx}][sit_abs]" class="${baseSelect} sit-abs-select">
             <option value=""></option>
             <option value="Nu absentează deloc">Nu absentează deloc</option>
             <option value="Absentează uneori/rar">Absentează uneori/rar</option>
@@ -143,6 +136,62 @@ jQuery(function ($) {
             <option value=""></option>
             <option value="Nu">Nu</option>
             <option value="Da">Da</option>
+          </select>
+        </td>
+        <td class="${td} cauze-abs-cell" style="display:none;">
+          <textarea name="students[${idx}][cauze_abs]" rows="2" placeholder="" class="${baseInput}"></textarea>
+        </td>
+        <td class="${td} risc-abandon-cell" style="display:none;">
+          <select name="students[${idx}][risc_abandon]" class="${baseSelect}">
+            <option value=""></option>
+            <option value="Da">Da</option>
+            <option value="Nu">Nu</option>
+          </select>
+        </td>
+        <td class="${td}">
+          <select name="students[${idx}][repeta_clasa]" class="${baseSelect}">
+            <option value=""></option>
+            <option value="Da">Da</option>
+            <option value="Nu">Nu</option>
+          </select>
+        </td>
+        <td class="${td}">
+          <select name="students[${idx}][observation]" class="${baseSelect} obs-select">
+            <option value=""></option>
+            <option value="abandon">Abandon</option>
+            <option value="plecat_tara">A plecat din țară</option>
+            <option value="transferat_din">S-a transferat din clasă</option>
+            <option value="transferat_in">S-a transferat în clasă</option>
+          </select>
+        </td>
+        <td class="${td}">
+          <textarea name="students[${idx}][alte_obs]" rows="2" placeholder="Ex. cazuri CES, situații speciale" class="${baseInput}"></textarea>
+        </td>
+        <td class="${td} demers-familie-cell">
+          <span class="demers-na text-xs text-slate-400">Nu este cazul</span>
+          <select name="students[${idx}][demers_familie]" class="${baseSelect} demers-select" style="display:none;">
+            <option value=""></option>
+            <option value="Da">Da</option>
+            <option value="Nu">Nu</option>
+            <option value="Nu a fost cazul">Nu a fost cazul</option>
+          </select>
+        </td>
+        <td class="${td} demers-conducere-cell">
+          <span class="demers-na text-xs text-slate-400">Nu este cazul</span>
+          <select name="students[${idx}][demers_conducere]" class="${baseSelect} demers-select" style="display:none;">
+            <option value=""></option>
+            <option value="Da">Da</option>
+            <option value="Nu">Nu</option>
+            <option value="Nu a fost cazul">Nu a fost cazul</option>
+          </select>
+        </td>
+        <td class="${td} demers-consilier-cell">
+          <span class="demers-na text-xs text-slate-400">Nu este cazul</span>
+          <select name="students[${idx}][demers_consilier]" class="${baseSelect} demers-select" style="display:none;">
+            <option value=""></option>
+            <option value="Da">Da</option>
+            <option value="Nu">Nu</option>
+            <option value="Nu a fost cazul">Nu a fost cazul</option>
           </select>
         </td>
         <td class="${td} notes-cell">
@@ -189,8 +238,36 @@ jQuery(function ($) {
   });
 
   $(document).on("change", ".obs-select", function () {
-    const ta = $(this).closest("tr").find("textarea");
-    this.value ? ta.show() : ta.hide().val("");
+    const $row = $(this).closest("tr");
+    const notesTa = $row.find(".notes-cell textarea");
+    this.value ? notesTa.show() : notesTa.hide().val("");
+  });
+
+  // Conditional logic: sit_abs → cauze_abs, risc_abandon, demers_*
+  $(document).on("change", ".sit-abs-select", function () {
+    const $row = $(this).closest("tr, form");
+    const val = $(this).val() || "";
+    const showExtra = ["Absentează des", "Absentează foarte des", "Nu a venit niciodată"].includes(val);
+
+    // cauze_abs & risc_abandon: show/hide
+    $row.find(".cauze-abs-cell").toggle(showExtra);
+    $row.find(".risc-abandon-cell").toggle(showExtra);
+    if (!showExtra) {
+      $row.find("[name*='cauze_abs']").val("");
+      $row.find("[name*='risc_abandon']").val("");
+    }
+
+    // demers_*: show select / show "Nu este cazul"
+    $row.find(".demers-familie-cell, .demers-conducere-cell, .demers-consilier-cell").each(function () {
+      const $cell = $(this);
+      if (showExtra) {
+        $cell.find(".demers-na").hide();
+        $cell.find(".demers-select").show();
+      } else {
+        $cell.find(".demers-na").show();
+        $cell.find(".demers-select").hide().val("");
+      }
+    });
   });
 
   // Salvare elevi (FormData -> admin-ajax.php)
@@ -218,11 +295,18 @@ jQuery(function ($) {
         "age",
         "gender",
         "class_label",
-        "observation",
         "sit_abs",
         "frecventa",
         "bursa",
         "dif_limba",
+        "cauze_abs",
+        "risc_abandon",
+        "repeta_clasa",
+        "observation",
+        "alte_obs",
+        "demers_familie",
+        "demers_conducere",
+        "demers_consilier",
         "notes",
       ].forEach((f) => {
           let v = pick(f);
@@ -552,6 +636,40 @@ jQuery(function ($) {
     $form.off("submit.saveSel").on("submit.saveSel", function (e) {
       e.preventDefault();
 
+      // Validare completare integrală la salvare permanentă
+      const isFinal =
+        (__SEL_LAST_BTN && __SEL_LAST_BTN.dataset?.status === "final") ||
+        $form.find('input[name="status"]').val() === "final";
+
+      if (isFinal) {
+        const missing = [];
+        $form.find(".question-wrapper").each(function () {
+          const $wrap = $(this);
+          const $radios = $wrap.find('input[type="radio"]');
+          if ($radios.length && !$radios.filter(":checked").length) {
+            const label = $wrap.find(".question-label").text().trim();
+            missing.push(label);
+            $wrap.css("outline", "2px solid #ef4444");
+          } else {
+            $wrap.css("outline", "");
+          }
+        });
+        if (missing.length) {
+          alert(
+            "Nu poți salva permanent. Completează următoarele câmpuri:\n\n" +
+              missing.map((m) => "• " + m).join("\n")
+          );
+          // Scroll la prima întrebare necompletată
+          const $first = $form.find('.question-wrapper').filter(function () {
+            return $(this).css("outline").indexOf("solid") !== -1;
+          }).first();
+          if ($first.length) {
+            $first[0].scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+          return;
+        }
+      }
+
       // construim payload din serializeArray + includem butonul apăsat
       const arr = $form.serializeArray();
       if (__SEL_LAST_BTN && __SEL_LAST_BTN.name) {
@@ -783,7 +901,7 @@ jQuery(function ($) {
           })
           .join("");
         return `
-          <div class="question-wrapper py-3 flex items-center gap-x-4 justify-between" ${req} ${cond}>
+          <div class="question-wrapper py-3 px-3 flex items-center gap-x-4 justify-between" ${req} ${cond}>
             <label class="flex-1 question-label block text-sm font-medium">${this.esc(
               q.label
             )}</label>
@@ -796,7 +914,7 @@ jQuery(function ($) {
         max = q.max ?? 10,
         step = q.step ?? "1";
       return `
-        <div class="question-wrapper py-3 flex items-center gap-x-4 justify-between" ${req} ${cond}>
+        <div class="question-wrapper py-3 px-3 flex items-center gap-x-4 justify-between" ${req} ${cond}>
           <label class="flex-1 question-label block text-sm font-medium mb-2">${this.esc(
             q.label
           )} <span class="ml-2 text-xs text-gray-500">(${min}–${max})</span></label>
@@ -805,7 +923,7 @@ jQuery(function ($) {
               q.name
             )}" min="${min}" max="${max}" step="${this.esc(
         step
-      )}" placeholder="0" class="w-32 px-3 py-1 text-sm border rounded border-slate-300 text-sky-800">
+      )}" placeholder="0" class="w-32 px-3 py-1 text-sm border rounded border-slate-300 text-sky-800" style="min-width:8rem">
           </div>
         </div>`;
     },
@@ -872,22 +990,22 @@ jQuery(function ($) {
     },
 
     visibleByCond($form, $wrap) {
-      const field = $wrap.data("cond-field");
+      const field = $wrap.attr("data-cond-field");
       if (!field) return true;
-      const allowed = String($wrap.data("cond-values") || "")
+      const allowed = String($wrap.attr("data-cond-values") || "")
         .split("|")
         .map((v) => v.trim().toUpperCase())
         .filter(Boolean);
       const $ctrl = $form.find(`[name="${field}"]`);
       const val = ($ctrl.val() || "").toUpperCase();
-      const txt = $ctrl.is("select")
-        ? ($ctrl.find(":selected").text() || "").toUpperCase()
-        : "";
-      const show = allowed.includes(val) || (txt && allowed.includes(txt));
-      $wrap.toggle(show);
-      if (!show) {
-        const $inp = $wrap.find("input,select");
-        if ($inp.length) $inp.val($inp.is("select") ? "" : "");
+      const show = allowed.includes(val);
+      if (show) {
+        $wrap.get(0).style.display = "";
+      } else {
+        $wrap.get(0).style.display = "none";
+        $wrap.find("input,select").each(function () {
+          $(this).val($(this).is("select") ? "" : "");
+        });
       }
       return show;
     },
@@ -923,14 +1041,36 @@ jQuery(function ($) {
       this.updateRangesLive($form);
 
       const applyAll = () => {
-        $form
-          .find(".question-wrapper, .cond-break")
-          .each((_, el) => this.visibleByCond($form, $(el)));
+        // collect all visibility decisions first, then apply (avoids re-entrant events)
+        const els = $form.find(".question-wrapper, .cond-break").toArray();
+        const decisions = [];
+        for (let i = 0; i < els.length; i++) {
+          const el = els[i];
+          const field = el.getAttribute("data-cond-field");
+          if (!field) continue;
+          const allowed = (el.getAttribute("data-cond-values") || "")
+            .split("|").map(v => v.trim().toUpperCase()).filter(Boolean);
+          const $ctrl = $form.find(`[name="${field}"]`);
+          const val = ($ctrl.val() || "").toUpperCase();
+          decisions.push({ el, show: allowed.includes(val) });
+        }
+        // apply all at once
+        for (let i = 0; i < decisions.length; i++) {
+          const { el, show } = decisions[i];
+          el.style.display = show ? "" : "none";
+          if (!show) {
+            $(el).find("input,select").each(function () {
+              this.value = "";
+            });
+          }
+        }
         this.updateProgress();
       };
       applyAll();
 
       $form.on("change input", "input,select", () => applyAll());
+      // backup: document-level delegation for selects (ensures conditional fields update)
+      $(document).off("change.litCond").on("change.litCond", "#questionnaireForm select", () => applyAll());
 
       // prefill din DB
       $.post(
@@ -963,8 +1103,6 @@ jQuery(function ($) {
             let ok = true;
             $form.find(".question-wrapper:visible").each(function () {
               const $w = $(this);
-              const req = $w.data("required");
-              if (!req) return;
               const hasRadio =
                 $w.find('input[type="radio"]:checked').length > 0;
               const $r = $w.find('input[type="number"]');
@@ -1050,6 +1188,22 @@ jQuery(function ($) {
                 throw new Error(data?.data || "Eroare la salvare.");
               alert("✔️ Chestionar LIT salvat (" + status + ").");
               closePanel();
+              const cid = $("#studentList").data("class-id");
+              if (cid) {
+                setTimeout(() => {
+                  $.post(
+                    ajaxurl,
+                    {
+                      action: "get_students",
+                      class_id: cid,
+                      generation_id: cid,
+                    },
+                    function (r) {
+                      if (r && r.success) $("#studentList").html(r.data);
+                    }
+                  );
+                }, 150);
+              }
             })
             .catch((err) => {
               console.error("[LIT][save]", err);
