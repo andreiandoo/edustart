@@ -193,6 +193,28 @@ function edu_alter_students_add_class_label() {
     }
 }
 
+function edu_alter_students_add_extended_fields() {
+    global $wpdb;
+    $table = $wpdb->prefix . 'edu_students';
+    $new_cols = [
+        'cauze_abs'        => "TEXT NULL",
+        'risc_abandon'     => "VARCHAR(10) NULL DEFAULT ''",
+        'repeta_clasa'     => "VARCHAR(10) NULL DEFAULT ''",
+        'alte_obs'         => "TEXT NULL",
+        'demers_familie'   => "VARCHAR(30) NULL DEFAULT ''",
+        'demers_conducere' => "VARCHAR(30) NULL DEFAULT ''",
+        'demers_consilier' => "VARCHAR(30) NULL DEFAULT ''",
+    ];
+    foreach ($new_cols as $col_name => $col_def) {
+        $exists = $wpdb->get_results("SHOW COLUMNS FROM {$table} LIKE '{$col_name}'");
+        if (!$exists) {
+            $wpdb->query("ALTER TABLE {$table} ADD COLUMN {$col_name} {$col_def}");
+        }
+    }
+    // Extind observation de la ENUM la VARCHAR pentru a suporta valori noi
+    $wpdb->query("ALTER TABLE {$table} MODIFY COLUMN observation VARCHAR(50) NULL DEFAULT ''");
+}
+
 if (!function_exists('edu_schools_add_columns_tfr_siiir_mediu')) {
   function edu_schools_add_columns_tfr_siiir_mediu(){
     global $wpdb;

@@ -25,6 +25,7 @@ function edu_render_upgrade_schema_page() {
         edu_alter_generations_add_name();
         edu_alter_generations_add_classlabels();
         edu_alter_students_add_class_label();
+        edu_alter_students_add_extended_fields();
         $msg = 'Schema a fost verificată/creată. (Tabelul edu_generations + coloanele generation_id/professor_id în edu_students)';
     }
 
