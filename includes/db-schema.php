@@ -211,6 +211,12 @@ function edu_alter_students_add_extended_fields() {
             $wpdb->query("ALTER TABLE {$table} ADD COLUMN {$col_name} {$col_def}");
         }
     }
+    // updated_at – timestamp pentru editări
+    $exists = $wpdb->get_results("SHOW COLUMNS FROM {$table} LIKE 'updated_at'");
+    if (!$exists) {
+        $wpdb->query("ALTER TABLE {$table} ADD COLUMN updated_at DATETIME NULL DEFAULT NULL");
+    }
+
     // Extind observation de la ENUM la VARCHAR pentru a suporta valori noi
     $wpdb->query("ALTER TABLE {$table} MODIFY COLUMN observation VARCHAR(50) NULL DEFAULT ''");
 }
