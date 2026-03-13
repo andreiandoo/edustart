@@ -357,14 +357,29 @@ jQuery(function ($) {
   $(document).on("click", ".delete-student", function () {
     if (!confirm("Ești sigur că vrei să ștergi acest elev?")) return;
     const id = $(this).data("id");
-    const row = $(this).closest("details");
 
     $.post(
       ajaxurl,
       { action: "delete_student", student_id: id },
       function (response) {
-        if (response.success) row.fadeOut(300, () => row.remove());
-        else alert("Eroare la ștergere elev.");
+        if (response.success) {
+          // Remove the main row
+          const mainRow = $("#student-row-" + id);
+          // Remove the details row
+          const detailsRow = $("#student-details-" + id);
+          // Also try closest details (legacy structure)
+          const detailsEl = mainRow.length ? null : $(".delete-student[data-id='" + id + "']").closest("details");
+
+          if (mainRow.length) {
+            mainRow.fadeOut(300, () => mainRow.remove());
+            detailsRow.fadeOut(300, () => detailsRow.remove());
+          } else if (detailsEl && detailsEl.length) {
+            detailsEl.fadeOut(300, () => detailsEl.remove());
+          }
+          edusToast("Elevul a fost șters.", "ok", 2000);
+        } else {
+          edusToast("Eroare la ștergere elev.", "error", 2000);
+        }
       }
     );
   });
