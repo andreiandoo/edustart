@@ -30,36 +30,37 @@ function edu_render_import_interface() {
                 if (++$row === 1) continue;
 
                 // Linii goale / invalide: ocolim
-                if (!is_array($data) || count($data) < 5) { // minim până la $name
+                if (!is_array($data) || count($data) < 6) { // minim până la $name (index 5)
                     $fail++;
                     continue;
                 }
 
-                // CSV așteptat (minim 13 coloane pentru versiunea existentă):
-                // 0: judet, 1: oras, 2: sat, 3: cod, 4: name, 5: short, 6: location, 7: superior_location,
-                // 8: regiune_tfr, 9: statut, 10: medie_irse, 11: scor_irse, 12: strategic
-                // (opțional)
-                // 13: index_vulnerabilitate_tfr, 14: numar_elevi_siiir, 15: tip, 16: first_year_tfr
+                // CSV așteptat (18 coloane):
+                // 0: judet, 1: oras, 2: sat, 3: cod, 4: mediu, 5: name, 6: short,
+                // 7: location, 8: superior_location, 9: regiune_tfr, 10: statut,
+                // 11: medie_irse, 12: scor_irse, 13: strategic,
+                // 14: index_vulnerabilitate_tfr, 15: numar_elevi_siiir, 16: tip, 17: first_year_tfr
 
                 $judet     = isset($data[0]) ? sanitize_text_field($data[0]) : '';
                 $oras      = isset($data[1]) ? sanitize_text_field($data[1]) : '';
                 $sat       = isset($data[2]) ? sanitize_text_field($data[2]) : '';
                 $cod       = isset($data[3]) ? intval($data[3]) : 0;
-                $name      = isset($data[4]) ? sanitize_text_field($data[4]) : '';
-                $short     = isset($data[5]) ? sanitize_text_field($data[5]) : '';
-                $loc       = isset($data[6]) ? sanitize_text_field($data[6]) : '';
-                $superior  = isset($data[7]) ? sanitize_text_field($data[7]) : '';
-                $regiune   = isset($data[8]) && in_array($data[8], ['RMD', 'RCV', 'SUD'], true) ? $data[8] : 'RMD';
-                $statut    = isset($data[9]) ? sanitize_text_field($data[9]) : '';
-                $medie     = isset($data[10]) && $data[10] !== '' ? floatval($data[10]) : null;
-                $scor      = isset($data[11]) && $data[11] !== '' ? floatval($data[11]) : null;
-                $strategic = isset($data[12]) && intval($data[12]) === 1 ? 1 : 0;
+                $mediu_csv = isset($data[4]) ? strtolower(trim($data[4])) : '';
+                $mediu     = in_array($mediu_csv, ['urban', 'rural'], true) ? $mediu_csv : null;
+                $name      = isset($data[5]) ? sanitize_text_field($data[5]) : '';
+                $short     = isset($data[6]) ? sanitize_text_field($data[6]) : '';
+                $loc       = isset($data[7]) ? sanitize_text_field($data[7]) : '';
+                $superior  = isset($data[8]) ? sanitize_text_field($data[8]) : '';
+                $regiune   = isset($data[9]) && in_array($data[9], ['RMD', 'RCV', 'SUD'], true) ? $data[9] : 'RMD';
+                $statut    = isset($data[10]) ? sanitize_text_field($data[10]) : '';
+                $medie     = isset($data[11]) && $data[11] !== '' ? floatval($data[11]) : null;
+                $scor      = isset($data[12]) && $data[12] !== '' ? floatval($data[12]) : null;
+                $strategic = isset($data[13]) && intval($data[13]) === 1 ? 1 : 0;
 
-                // NOU (opțional, dacă nu vin în CSV, rămân NULL):
-                $index_vulnerabilitate_tfr = isset($data[13]) && $data[13] !== '' ? sanitize_text_field($data[13]) : null;
-                $numar_elevi_siiir         = isset($data[14]) && $data[14] !== '' ? intval($data[14])   : null;
-                $tip                       = isset($data[15]) ? sanitize_text_field($data[15]) : null;
-                $first_year_tfr            = isset($data[16]) ? sanitize_text_field($data[16]) : null;
+                $index_vulnerabilitate_tfr = isset($data[14]) && $data[14] !== '' ? sanitize_text_field($data[14]) : null;
+                $numar_elevi_siiir         = isset($data[15]) && $data[15] !== '' ? intval($data[15])   : null;
+                $tip                       = isset($data[16]) && $data[16] !== '' ? sanitize_text_field($data[16]) : null;
+                $first_year_tfr            = isset($data[17]) && $data[17] !== '' ? sanitize_text_field($data[17]) : null;
 
                 // Validări minime
                 if ($judet === '' || $oras === '' || $cod === 0 || $name === '') {
@@ -110,22 +111,6 @@ function edu_render_import_interface() {
                     }
                 }
 
-                // Determină mediul (automat):
-                // - dacă are village_id => rural
-                // - altfel, verificăm și city_id: dacă are parent_city_id nenul (caz edge) => rural; altfel urban
-                $mediu = 'urban';
-                if (!empty($village_id)) {
-                    $mediu = 'rural';
-                } else {
-                    $city_parent = $wpdb->get_var($wpdb->prepare(
-                        "SELECT parent_city_id FROM {$wpdb->prefix}edu_cities WHERE id=%d",
-                        $city_id
-                    ));
-                    if (!is_null($city_parent) && (int)$city_parent > 0) {
-                        $mediu = 'rural';
-                    }
-                }
-
                 // Inserare școală
                 $inserted = $wpdb->insert("{$wpdb->prefix}edu_schools", [
                     'city_id'                 => $city_id,
@@ -148,10 +133,9 @@ function edu_render_import_interface() {
                     'first_year_tfr'            => $first_year_tfr,
                     'mediu'                     => $mediu,
                 ],
-                // Formate (facultativ, wpdb mapează corect și fără ele; dacă vrei strict):
                 [
                     '%d','%d','%d','%s','%s','%s','%s','%s','%s',
-                    '%s','%f','%f','%d','%f','%d','%s'
+                    '%s','%f','%f','%d','%s','%d','%s','%s','%s'
                 ]);
 
                 if ($inserted !== false) $ok++; else $fail++;
