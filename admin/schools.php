@@ -430,17 +430,45 @@ function edu_render_school_manager() {
     }
     echo '</div>';
 
-    // Listare școli (cu ID + Mediu + Cod SIIIR redenumit)
-    $schools = $wpdb->get_results("
+    // Total școli în DB
+    $total_schools = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}edu_schools");
+
+    // Paginație
+    $per_page = 50;
+    $current_page = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
+    $total_pages = max(1, ceil($total_schools / $per_page));
+    $offset = ($current_page - 1) * $per_page;
+
+    $schools = $wpdb->get_results($wpdb->prepare("
         SELECT s.*, c.name as city_name, ct.name as county_name, v.name as village_name
         FROM {$wpdb->prefix}edu_schools s
         JOIN {$wpdb->prefix}edu_cities c ON s.city_id = c.id
         JOIN {$wpdb->prefix}edu_counties ct ON c.county_id = ct.id
         LEFT JOIN {$wpdb->prefix}edu_cities v ON s.village_id = v.id
         ORDER BY ct.name, c.name, s.name
-    ");
+        LIMIT %d OFFSET %d
+    ", $per_page, $offset));
 
-    echo '<h2 class="mb-2 text-xl font-semibold">Lista școlilor</h2>';
+    echo '<h2 class="mb-2 text-xl font-semibold">Lista școlilor <span style="font-weight:normal;font-size:14px;color:#666;">(' . $total_schools . ' total în DB)</span></h2>';
+
+    // Paginație sus
+    if ($total_pages > 1) {
+        $base_url = admin_url('admin.php?page=edu-location-manager&tab=schools');
+        echo '<div class="tablenav"><div class="tablenav-pages">';
+        echo '<span class="displaying-num">' . $total_schools . ' elemente</span>';
+        echo '<span class="pagination-links">';
+        if ($current_page > 1) {
+            echo ' <a class="button" href="' . esc_url($base_url . '&paged=1') . '">&laquo;</a>';
+            echo ' <a class="button" href="' . esc_url($base_url . '&paged=' . ($current_page - 1)) . '">&lsaquo;</a> ';
+        }
+        echo ' <span class="paging-input">' . $current_page . ' din ' . $total_pages . '</span> ';
+        if ($current_page < $total_pages) {
+            echo ' <a class="button" href="' . esc_url($base_url . '&paged=' . ($current_page + 1)) . '">&rsaquo;</a>';
+            echo ' <a class="button" href="' . esc_url($base_url . '&paged=' . $total_pages) . '">&raquo;</a>';
+        }
+        echo '</span></div></div>';
+    }
+
     echo '<table class="wp-list-table widefat striped">';
     echo '<thead><tr>
         <th>ID</th><th>Cod SIIIR</th><th>Denumire</th><th>Scurt</th><th>Județ</th><th>Oraș</th><th>Sat/Com.</th><th>Mediu</th><th>Regiune</th><th>Statut</th><th>Medie IRSE</th><th>Scor IRSE</th><th>Strategică</th><th>Acțiuni</th>
@@ -473,4 +501,20 @@ function edu_render_school_manager() {
         </tr>";
     }
     echo '</tbody></table>';
+
+    // Paginație jos
+    if ($total_pages > 1) {
+        echo '<div class="tablenav"><div class="tablenav-pages">';
+        echo '<span class="pagination-links">';
+        if ($current_page > 1) {
+            echo ' <a class="button" href="' . esc_url($base_url . '&paged=1') . '">&laquo;</a>';
+            echo ' <a class="button" href="' . esc_url($base_url . '&paged=' . ($current_page - 1)) . '">&lsaquo;</a> ';
+        }
+        echo ' <span class="paging-input">' . $current_page . ' din ' . $total_pages . '</span> ';
+        if ($current_page < $total_pages) {
+            echo ' <a class="button" href="' . esc_url($base_url . '&paged=' . ($current_page + 1)) . '">&rsaquo;</a>';
+            echo ' <a class="button" href="' . esc_url($base_url . '&paged=' . $total_pages) . '">&raquo;</a>';
+        }
+        echo '</span></div></div>';
+    }
 }

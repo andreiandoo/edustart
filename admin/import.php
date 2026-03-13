@@ -8,6 +8,8 @@ function edu_render_import_interface() {
     echo '<form method="post" enctype="multipart/form-data" class="mb-4">';
     echo wp_nonce_field('edu_import_csv', 'edu_csv_nonce', true, false);
     echo '<input type="file" name="edu_csv_file" accept=".csv" required class="p-2 mr-2 border">';
+    echo '<label style="margin-left:12px;"><input type="checkbox" name="edu_overwrite" value="1"> Suprascrie școlile existente (după cod SIIIR)</label>';
+    echo '<br><br>';
     echo '<button type="submit" name="edu_import_submit" class="button button-primary">Importă</button>';
     echo '</form>';
 
@@ -20,9 +22,13 @@ function edu_render_import_interface() {
 
         $file = $_FILES['edu_csv_file']['tmp_name'];
 
+        $overwrite = !empty($_POST['edu_overwrite']);
+
         if (($handle = fopen($file, 'r')) !== false) {
             $row = 0;
             $ok = 0;
+            $skip = 0;
+            $updated = 0;
             $fail = 0;
 
             while (($data = fgetcsv($handle, 10000, ",")) !== false) {
@@ -111,38 +117,57 @@ function edu_render_import_interface() {
                     }
                 }
 
-                // Inserare școală
-                $inserted = $wpdb->insert("{$wpdb->prefix}edu_schools", [
-                    'city_id'                 => $city_id,
-                    'village_id'              => $village_id,
-                    'cod'                     => $cod,
-                    'name'                    => $name,
-                    'short_name'              => $short,
-                    'location'                => $loc,
-                    'superior_location'       => $superior,
-                    'county'                  => $judet,
-                    'regiune_tfr'             => $regiune,
-                    'statut'                  => $statut,
-                    'medie_irse'              => $medie,
-                    'scor_irse'               => $scor,
-                    'strategic'               => $strategic,
-                    // NOI:
+                // Verifică dacă școala există deja (după cod SIIIR)
+                $existing_id = $wpdb->get_var($wpdb->prepare(
+                    "SELECT id FROM {$wpdb->prefix}edu_schools WHERE cod = %d",
+                    $cod
+                ));
+
+                $school_data = [
+                    'city_id'                   => $city_id,
+                    'village_id'                => $village_id,
+                    'cod'                       => $cod,
+                    'name'                      => $name,
+                    'short_name'                => $short,
+                    'location'                  => $loc,
+                    'superior_location'         => $superior,
+                    'county'                    => $judet,
+                    'regiune_tfr'               => $regiune,
+                    'statut'                    => $statut,
+                    'medie_irse'                => $medie,
+                    'scor_irse'                 => $scor,
+                    'strategic'                 => $strategic,
                     'index_vulnerabilitate_tfr' => $index_vulnerabilitate_tfr,
                     'numar_elevi_siiir'         => $numar_elevi_siiir,
                     'tip'                       => $tip,
                     'first_year_tfr'            => $first_year_tfr,
                     'mediu'                     => $mediu,
-                ],
-                [
-                    '%d','%d','%d','%s','%s','%s','%s','%s','%s',
-                    '%s','%f','%f','%d','%s','%d','%s','%s','%s'
-                ]);
+                ];
+                $formats = ['%d','%d','%d','%s','%s','%s','%s','%s','%s',
+                            '%s','%f','%f','%d','%s','%d','%s','%s','%s'];
 
-                if ($inserted !== false) $ok++; else $fail++;
+                if ($existing_id) {
+                    if ($overwrite) {
+                        $result = $wpdb->update(
+                            "{$wpdb->prefix}edu_schools",
+                            $school_data,
+                            ['id' => $existing_id],
+                            $formats,
+                            ['%d']
+                        );
+                        if ($result !== false) $updated++; else $fail++;
+                    } else {
+                        $skip++;
+                    }
+                } else {
+                    $inserted = $wpdb->insert("{$wpdb->prefix}edu_schools", $school_data, $formats);
+                    if ($inserted !== false) $ok++; else $fail++;
+                }
             }
 
             fclose($handle);
-            echo '<div class="notice notice-success"><p>Import finalizat: ' . intval($ok) . ' rânduri OK, ' . intval($fail) . ' rânduri cu erori.</p></div>';
+            $msg = 'Import finalizat: ' . intval($ok) . ' inserate, ' . intval($updated) . ' actualizate, ' . intval($skip) . ' omise (existente), ' . intval($fail) . ' erori.';
+            echo '<div class="notice notice-success"><p>' . $msg . '</p></div>';
         }
     }
 }
