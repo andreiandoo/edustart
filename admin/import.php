@@ -31,7 +31,12 @@ function edu_render_import_interface() {
             $updated = 0;
             $fail = 0;
 
-            while (($data = fgetcsv($handle, 10000, ",")) !== false) {
+            // Auto-detect delimitator (tab sau virgulă) din prima linie
+            $first_line = fgets($handle);
+            rewind($handle);
+            $delimiter = (strpos($first_line, "\t") !== false) ? "\t" : ",";
+
+            while (($data = fgetcsv($handle, 10000, $delimiter)) !== false) {
                 // sărim antetul
                 if (++$row === 1) continue;
 
@@ -50,7 +55,7 @@ function edu_render_import_interface() {
                 $judet     = isset($data[0]) ? sanitize_text_field($data[0]) : '';
                 $oras      = isset($data[1]) ? sanitize_text_field($data[1]) : '';
                 $sat       = isset($data[2]) ? sanitize_text_field($data[2]) : '';
-                $cod       = isset($data[3]) ? intval($data[3]) : 0;
+                $cod       = isset($data[3]) ? preg_replace('/[^0-9]/', '', $data[3]) : '0';
                 $mediu_csv = isset($data[4]) ? strtolower(trim($data[4])) : '';
                 $mediu     = in_array($mediu_csv, ['urban', 'rural'], true) ? $mediu_csv : null;
                 $name      = isset($data[5]) ? sanitize_text_field($data[5]) : '';
@@ -69,7 +74,7 @@ function edu_render_import_interface() {
                 $first_year_tfr            = isset($data[17]) && $data[17] !== '' ? sanitize_text_field($data[17]) : null;
 
                 // Validări minime
-                if ($judet === '' || $oras === '' || $cod === 0 || $name === '') {
+                if ($judet === '' || $oras === '' || $cod === '0' || $cod === '' || $name === '') {
                     $fail++;
                     continue;
                 }
@@ -119,7 +124,7 @@ function edu_render_import_interface() {
 
                 // Verifică dacă școala există deja (după cod SIIIR)
                 $existing_id = $wpdb->get_var($wpdb->prepare(
-                    "SELECT id FROM {$wpdb->prefix}edu_schools WHERE cod = %d",
+                    "SELECT id FROM {$wpdb->prefix}edu_schools WHERE cod = %s",
                     $cod
                 ));
 
@@ -143,7 +148,7 @@ function edu_render_import_interface() {
                     'first_year_tfr'            => $first_year_tfr,
                     'mediu'                     => $mediu,
                 ];
-                $formats = ['%d','%d','%d','%s','%s','%s','%s','%s','%s',
+                $formats = ['%d','%d','%s','%s','%s','%s','%s','%s','%s',
                             '%s','%f','%f','%d','%s','%d','%s','%s','%s'];
 
                 if ($existing_id) {
@@ -155,13 +160,13 @@ function edu_render_import_interface() {
                             $formats,
                             ['%d']
                         );
-                        if ($result !== false) $updated++; else $fail++;
+                        if ($result !== false) $updated++; else { $fail++; $last_err = $wpdb->last_error; }
                     } else {
                         $skip++;
                     }
                 } else {
                     $inserted = $wpdb->insert("{$wpdb->prefix}edu_schools", $school_data, $formats);
-                    if ($inserted !== false) $ok++; else $fail++;
+                    if ($inserted !== false) $ok++; else { $fail++; $last_err = $wpdb->last_error; }
                 }
             }
 

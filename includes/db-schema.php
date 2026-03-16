@@ -113,7 +113,7 @@ function edu_create_location_tables() {
         id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
         city_id BIGINT UNSIGNED NOT NULL,
         village_id BIGINT UNSIGNED DEFAULT NULL,
-        cod INT NOT NULL,
+        cod BIGINT NOT NULL,
         name VARCHAR(255) NOT NULL,
         short_name VARCHAR(100),
         location VARCHAR(100),
@@ -230,6 +230,12 @@ if (!function_exists('edu_schools_add_columns_tfr_siiir_mediu')) {
     $col_exists = function($col) use ($wpdb, $tbl){
       return (bool) $wpdb->get_var( $wpdb->prepare("SHOW COLUMNS FROM {$tbl} LIKE %s", $col) );
     };
+
+    // cod — migrare de la INT la BIGINT (codurile SIIIR depășesc INT max)
+    $col_info = $wpdb->get_row("SHOW COLUMNS FROM {$tbl} LIKE 'cod'");
+    if ($col_info && stripos($col_info->Type, 'bigint') === false) {
+      $wpdb->query("ALTER TABLE {$tbl} MODIFY COLUMN cod BIGINT NOT NULL");
+    }
 
     // index_vulnerabilitate_tfr — VARCHAR(10) pt valori ca "3NO"
     if (!$col_exists('index_vulnerabilitate_tfr')) {
