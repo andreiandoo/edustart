@@ -322,12 +322,12 @@ usort($rows, function($a,$b){
       <div class="flex flex-wrap items-start justify-between gap-6">
         <div class="text-sky-800">
           <h1 class="text-2xl font-semibold md:text-3xl">Evaluările mele</h1>
-          <p class="mt-1 text-sm text-slate-800">Toate evaluările pe generații și module (T0 / Ti / T1), cu filtrare.</p>
+          <p class="mt-1 text-sm text-slate-800">Toate evaluările pe generații/clase și module (T0 / Ti / T1), cu filtrare.</p>
         </div>
         <div class="flex items-center gap-2">
           <div class="">
             <select x-model="genFilter" class="px-3 py-2 text-sm bg-white rounded-lg text-slate-800 focus:outline-none">
-              <option value="">Toate generațiile</option>
+              <option value="">Toate generațiile/clasele</option>
               <?php foreach($generations as $g){ echo '<option value="'.esc_attr($g->id).'">'.esc_html($g->name).'</option>'; } ?>
             </select>
           </div>

@@ -46,9 +46,9 @@ if (!function_exists('fmt_delta')) {
         </span>
     </div>
 
-  <div class="grid gap-4 sm:grid-cols-6">
+  <div class="grid gap-4 sm:grid-cols-5">
     <!-- Media generală (toate etapele) -->
-    <div class="p-4 rounded-xl bg-gray-50">
+    <div class="hidden p-4 rounded-xl bg-gray-50">
       <div class="text-sm text-gray-500">Media generală</div>
       <div class="text-2xl font-bold">
         <?= $sel_overall_allStages_avg!==null ? number_format($sel_overall_allStages_avg,2) : '—' ?>
@@ -75,16 +75,22 @@ if (!function_exists('fmt_delta')) {
       <thead>
         <tr class="text-left text-gray-500 border-b">
           <th class="py-2 pr-4">Etapă</th>
+          <th class="py-2 pr-4">Grad completare</th>
           <?php foreach($SEL_CHAPTERS as $cap): ?>
             <th class="py-2 pr-4"><?= esc_html($cap) ?></th>
           <?php endforeach; ?>
-          <th class="py-2 pr-4 font-semibold">Media generală</th>
+          <th class="py-2 pr-4 font-semibold">Scor SEL</th>
         </tr>
       </thead>
       <tbody class="divide-y">
         <!-- T0 -->
         <tr>
           <td class="py-2 pr-4 font-medium">T0</td>
+          <td class="py-2 pr-4">
+            <span class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200">
+              <?= isset($sel_completion_t0) ? number_format($sel_completion_t0, 0) : '—' ?>%
+            </span>
+          </td>
           <?php foreach($SEL_CHAPTERS as $cap):
             $v = $sel_t0_avg_chapters[$cap] ?? null; ?>
             <td class="py-2 pr-4">
@@ -101,6 +107,11 @@ if (!function_exists('fmt_delta')) {
         <!-- Ti -->
         <tr>
           <td class="py-2 pr-4 font-medium">Ti</td>
+          <td class="py-2 pr-4">
+            <span class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200">
+              <?= isset($sel_completion_ti) ? number_format($sel_completion_ti, 0) : '—' ?>%
+            </span>
+          </td>
           <?php foreach($SEL_CHAPTERS as $cap):
             $v = $sel_ti_avg_chapters[$cap] ?? null;
             $d = $sel_delta['ti_t0'][$cap] ?? null; ?>
@@ -126,6 +137,11 @@ if (!function_exists('fmt_delta')) {
         <!-- T1 -->
         <tr>
           <td class="py-2 pr-4 font-medium">T1</td>
+          <td class="py-2 pr-4">
+            <span class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200">
+              <?= isset($sel_completion_t1) ? number_format($sel_completion_t1, 0) : '—' ?>%
+            </span>
+          </td>
           <?php foreach($SEL_CHAPTERS as $cap):
             $v  = $sel_t1_avg_chapters[$cap] ?? null;
             $d1 = $sel_delta['t1_ti'][$cap] ?? null;
@@ -158,6 +174,11 @@ if (!function_exists('fmt_delta')) {
       <tfoot>
         <tr class="border-t">
             <td class="py-2 pr-4 font-semibold">Medie (toate etapele)</td>
+            <td class="py-2 pr-4">
+              <span class="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-300">
+                <?= isset($sel_completion_allStages) ? number_format($sel_completion_allStages, 0) : '—' ?>%
+              </span>
+            </td>
             <?php foreach ($SEL_CHAPTERS as $cap):
             $v = $sel_gen_chapter_avg_allStages[$cap] ?? null; ?>
             <td class="py-2 pr-4">
@@ -204,11 +225,9 @@ if (!function_exists('fmt_delta')) {
     </div>
   </div>
 
-  <div class="overflow-x-auto">
     <table class="min-w-full text-xs align-top md:text-sm">
-      <thead>
-        <tr class="text-left text-gray-500 border-b">
-          <th class="px-2 py-2 text-right">#</th>
+      <thead class="sticky top-[52px] z-10 bg-white shadow-[0_1px_0_0_theme(colors.slate.200)]">
+        <tr class="text-left text-gray-500">
           <th class="py-2 pr-4">Elev</th>
           <th class="py-2 pr-4">Capitol</th>
           <th class="py-2 pr-4">T0</th>
@@ -218,8 +237,7 @@ if (!function_exists('fmt_delta')) {
           <th class="py-2 pr-4">Δ (Ti−T0)</th>
           <th class="py-2 pr-4">Δ (T1−Ti)</th>
           <th class="py-2 pr-4">Δ (T1−T0)</th>
-          <th class="py-2 pr-4">Medie gen (capitol)</th>
-          <th class="py-2 pr-4">Δ elev−gen (medie)</th>
+          <th class="py-2 pr-4">vs. Generație</th>
         </tr>
       </thead>
       <tbody class="divide-y">
@@ -233,7 +251,6 @@ if (!function_exists('fmt_delta')) {
         }
         }
 
-        $rowIdx = 1;
         if (!empty($students)):
             foreach ($students as $s):
                 $sid   = intval($s->id);
@@ -248,8 +265,7 @@ if (!function_exists('fmt_delta')) {
                 // Rând “header” elev – rămâne mereu vizibil
                 ?>
                 <tr class="bg-slate-50/60">
-                    <td class="px-2 py-2 text-right text-gray-500"><?= $rowIdx++ ?></td>
-                    <td class="py-2 pr-4 font-medium" colspan="11">
+                    <td class="py-2 pr-4 font-medium" colspan="10">
                         <a class="flex items-center group gap-x-2 hover:text-blue-600" href="<?= esc_url(home_url('/panou/raport/elev/'.$sid)) ?>">
                             <?= esc_html($name) ?>
                             <span class="text-xs text-sky-600"> - vezi raportul elevului</span>
@@ -271,10 +287,7 @@ if (!function_exists('fmt_delta')) {
                 $delta_vs_gen_cap = ($stud_cap_avg!==null && $gen_cap_avg!==null) ? ($stud_cap_avg - $gen_cap_avg) : null;
                 ?>
                 <tr x-show="show('<?= esc_attr($cap) ?>')" x-cloak>
-                    <!-- coloanele # și Elev rămân goale pentru alinere -->
-                    <td class="py-2 pr-4 text-gray-500"></td>
                     <td class="py-2 pr-4"></td>
-
                     <td class="py-2 pr-4"><?= esc_html($cap) ?></td>
                     <td class="py-2 pr-4"><?= $a!==null?'<span class="px-2 py-1 rounded '.esc_attr(bg_score_class($a)).'">'.number_format($a,2).'</span>':'—' ?></td>
                     <td class="py-2 pr-4"><?= $b!==null?'<span class="px-2 py-1 rounded '.esc_attr(bg_score_class($b)).'">'.number_format($b,2).'</span>':'—' ?></td>
@@ -286,21 +299,55 @@ if (!function_exists('fmt_delta')) {
                     <td class="py-2 pr-4"><?= ($c!==null&&$b!==null)?'<span class="px-2 py-1 rounded '.esc_attr(delta_badge_class($c-$b)).'">'.number_format($c-$b,2).'</span>':'—' ?></td>
                     <td class="py-2 pr-4"><?= ($c!==null&&$a!==null)?'<span class="px-2 py-1 rounded '.esc_attr(delta_badge_class($c-$a)).'">'.number_format($c-$a,2).'</span>':'—' ?></td>
 
-                    <td class="py-2 pr-4"><?= $gen_cap_avg!==null?number_format($gen_cap_avg,2):'—' ?></td>
                     <td class="py-2 pr-4">
-                    <span class="px-2 py-1 rounded <?= esc_attr(delta_badge_class($delta_vs_gen_cap)) ?>">
-                        <?= $delta_vs_gen_cap!==null ? (($delta_vs_gen_cap>0?'+':'').number_format($delta_vs_gen_cap,2)) : '—' ?>
-                    </span>
+                      <div class="flex items-center gap-1">
+                        <span class="text-slate-500"><?= $gen_cap_avg!==null?number_format($gen_cap_avg,2):'—' ?></span>
+                        <span class="px-1.5 py-0.5 rounded text-[11px] <?= esc_attr(delta_badge_class($delta_vs_gen_cap)) ?>"><?= $delta_vs_gen_cap!==null ? (($delta_vs_gen_cap>0?'+':'').number_format($delta_vs_gen_cap,2)) : '—' ?></span>
+                      </div>
                     </td>
                 </tr>
                 <?php endforeach; // capitole
-            endforeach; // elevi
+
+                // Scor SEL = media pe capitole, per etapă și overall
+                $s_t0_vals = array_filter(array_map(fn($c) => $t0[$c], $SEL_CHAPTERS), fn($v) => $v !== null);
+                $s_ti_vals = array_filter(array_map(fn($c) => $ti[$c], $SEL_CHAPTERS), fn($v) => $v !== null);
+                $s_t1_vals = array_filter(array_map(fn($c) => $t1[$c], $SEL_CHAPTERS), fn($v) => $v !== null);
+                $s_t0_avg = count($s_t0_vals) ? array_sum($s_t0_vals) / count($s_t0_vals) : null;
+                $s_ti_avg = count($s_ti_vals) ? array_sum($s_ti_vals) / count($s_ti_vals) : null;
+                $s_t1_avg = count($s_t1_vals) ? array_sum($s_t1_vals) / count($s_t1_vals) : null;
+                $s_all_vals = array_filter([$s_t0_avg, $s_ti_avg, $s_t1_avg], fn($v) => $v !== null);
+                $s_overall  = count($s_all_vals) ? array_sum($s_all_vals) / count($s_all_vals) : null;
+                $gen_overall = $sel_overall_allStages_avg ?? null;
+                $s_delta_gen = ($s_overall !== null && $gen_overall !== null) ? ($s_overall - $gen_overall) : null;
+                ?>
+                <tr class="bg-slate-100/80 border-t border-slate-300">
+                    <td class="py-2 pr-4"></td>
+                    <td class="py-2 pr-4 font-semibold text-slate-700">Scor SEL</td>
+                    <td class="py-2 pr-4"><?= $s_t0_avg !== null ? '<span class="px-2 py-1 rounded font-semibold '.esc_attr(bg_score_class($s_t0_avg)).'">'.number_format($s_t0_avg,2).'</span>' : '—' ?></td>
+                    <td class="py-2 pr-4"><?= $s_ti_avg !== null ? '<span class="px-2 py-1 rounded font-semibold '.esc_attr(bg_score_class($s_ti_avg)).'">'.number_format($s_ti_avg,2).'</span>' : '—' ?></td>
+                    <td class="py-2 pr-4"><?= $s_t1_avg !== null ? '<span class="px-2 py-1 rounded font-semibold '.esc_attr(bg_score_class($s_t1_avg)).'">'.number_format($s_t1_avg,2).'</span>' : '—' ?></td>
+                    <td class="py-2 pr-4"><span class="px-2 py-1 font-bold rounded bg-slate-200 text-slate-800"><?= $s_overall !== null ? number_format($s_overall,2) : '—' ?></span></td>
+                    <?php
+                      $sd_ti_t0 = ($s_ti_avg !== null && $s_t0_avg !== null) ? ($s_ti_avg - $s_t0_avg) : null;
+                      $sd_t1_ti = ($s_t1_avg !== null && $s_ti_avg !== null) ? ($s_t1_avg - $s_ti_avg) : null;
+                      $sd_t1_t0 = ($s_t1_avg !== null && $s_t0_avg !== null) ? ($s_t1_avg - $s_t0_avg) : null;
+                    ?>
+                    <td class="py-2 pr-4"><span class="px-2 py-1 rounded text-xs <?= esc_attr(delta_badge_class($sd_ti_t0)) ?>"><?= fmt_delta($sd_ti_t0) ?></span></td>
+                    <td class="py-2 pr-4"><span class="px-2 py-1 rounded text-xs <?= esc_attr(delta_badge_class($sd_t1_ti)) ?>"><?= fmt_delta($sd_t1_ti) ?></span></td>
+                    <td class="py-2 pr-4"><span class="px-2 py-1 rounded text-xs <?= esc_attr(delta_badge_class($sd_t1_t0)) ?>"><?= fmt_delta($sd_t1_t0) ?></span></td>
+                    <td class="py-2 pr-4">
+                      <div class="flex items-center gap-1">
+                        <span class="text-slate-500"><?= $gen_overall !== null ? number_format($gen_overall,2) : '—' ?></span>
+                        <span class="px-1.5 py-0.5 rounded text-[11px] <?= esc_attr(delta_badge_class($s_delta_gen)) ?>"><?= $s_delta_gen !== null ? (($s_delta_gen>0?'+':'').number_format($s_delta_gen,2)) : '—' ?></span>
+                      </div>
+                    </td>
+                </tr>
+            <?php endforeach; // elevi
         else: ?>
-            <tr><td colspan="12" class="py-4 text-gray-500">Nu există elevi în această generație.</td></tr>
+            <tr><td colspan="10" class="py-4 text-gray-500">Nu există elevi în această generație.</td></tr>
         <?php endif; ?>
       </tbody>
     </table>
-  </div>
 </section>
 
 <script>
@@ -315,6 +362,7 @@ document.addEventListener('alpine:init', () => {
     clearAll(){ Object.keys(this.selected).forEach(k => this.selected[k] = false); },
   }));
 });
+
 </script>
 
 

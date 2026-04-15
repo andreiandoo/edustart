@@ -417,7 +417,8 @@ function tutor_gen_build_cards($tutor_id){
     // info generație + profesor
     $gen = $wpdb->get_row( $wpdb->prepare("SELECT id, name, year FROM $tbl_generations WHERE id=%d", $gid) );
     $gname = $gen->name ?? '—';
-    $gyear = $gen->year ?? '—';
+    $gyear_raw = $gen->year ?? '—';
+    $gyear = (preg_match('/^\d{4}$/', $gyear_raw)) ? $gyear_raw . '-' . ((int)$gyear_raw + 1) : $gyear_raw;
     $u = get_user_by('id', $pid);
     $prof_name  = $u ? trim(($u->first_name ?: $u->display_name) . ' ' . ($u->last_name ?? '')) : ('Profesor #'.$pid);
     $level_raw  = function_exists('get_field') ? get_field('nivel_predare', 'user_' . $pid) : get_user_meta($pid, 'nivel_predare', true);

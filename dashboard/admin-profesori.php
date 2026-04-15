@@ -83,12 +83,13 @@ function es_user_fullname($u){
 /* =============== Filtre (UI & logic) =============== */
 
 $s          = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
-$nivel      = isset($_GET['nivel']) ? sanitize_text_field(wp_unslash($_GET['nivel'])) : '';
+$nivel_arr  = isset($_GET['nivel']) ? array_filter(array_map('sanitize_text_field', (array)wp_unslash($_GET['nivel']))) : [];
 $statut     = isset($_GET['statut']) ? sanitize_text_field(wp_unslash($_GET['statut'])) : '';
 $gen_year   = isset($_GET['gen_year']) ? sanitize_text_field(wp_unslash($_GET['gen_year'])) : '';
 $county_f   = isset($_GET['county']) ? sanitize_text_field(wp_unslash($_GET['county'])) : '';
 $an_program = isset($_GET['an_program']) ? sanitize_text_field(wp_unslash($_GET['an_program'])) : '';
 $rsoi       = isset($_GET['rsoi']) ? sanitize_text_field(wp_unslash($_GET['rsoi'])) : '';
+$tutor_f    = isset($_GET['tutor']) ? (int)$_GET['tutor'] : 0;
 
 $perpage    = max(5, min(200, (int)($_GET['perpage'] ?? 25)));
 $paged      = max(1, (int)($_GET['paged'] ?? 1));
@@ -123,6 +124,9 @@ if ($an_program !== '') {
 }
 if ($rsoi !== '') {
   $meta_query[] = ['key' => 'segment_rsoi', 'value' => $rsoi, 'compare' => '='];
+}
+if ($tutor_f > 0) {
+  $meta_query[] = ['key' => 'assigned_tutor_id', 'value' => $tutor_f, 'compare' => '=', 'type' => 'NUMERIC'];
 }
 
 $args = [
@@ -257,26 +261,25 @@ sort($rsoi_list, SORT_NATURAL);
 
 $filtered = $all_prof;
 
-// Filtru: Nivel predare (normalizat)
-if ($nivel !== '') {
-  $nivel_code = es_normalize_level_code($nivel);
-  $by_level = [];
-  foreach ($filtered as $u) {
-    $raw = get_user_meta((int)$u->ID, 'nivel_predare', true);
-
-    // poate fi string sau array (ACF)
-    $match = false;
-    if (is_array($raw)) {
-      foreach ($raw as $rv) {
-        if (es_normalize_level_code($rv) === $nivel_code) { $match = true; break; }
+// Filtru: Nivel predare (normalizat, multiselect)
+if (!empty($nivel_arr)) {
+  $nivel_codes = array_filter(array_map('es_normalize_level_code', $nivel_arr));
+  if (!empty($nivel_codes)) {
+    $by_level = [];
+    foreach ($filtered as $u) {
+      $raw = get_user_meta((int)$u->ID, 'nivel_predare', true);
+      $match = false;
+      if (is_array($raw)) {
+        foreach ($raw as $rv) {
+          if (in_array(es_normalize_level_code($rv), $nivel_codes, true)) { $match = true; break; }
+        }
+      } else {
+        if (in_array(es_normalize_level_code($raw), $nivel_codes, true)) $match = true;
       }
-    } else {
-      if (es_normalize_level_code($raw) === $nivel_code) $match = true;
+      if ($match) $by_level[] = $u;
     }
-
-    if ($match) $by_level[] = $u;
+    $filtered = $by_level;
   }
-  $filtered = $by_level;
 }
 
 // Filtru: An generație
@@ -324,18 +327,23 @@ $export_url = add_query_arg([
   'nonce'  => wp_create_nonce('edus_export_teachers_csv'),
   // păstrăm filtrele active
   's'          => $s,
-  'nivel'      => $nivel,
+  'nivel'      => $nivel_arr,
   'statut'     => $statut,
   'gen_year'   => $gen_year,
   'county'     => $county_f,
   'an_program' => $an_program,
   'rsoi'       => $rsoi,
+  'tutor'      => $tutor_f,
 ], admin_url('admin-post.php'));
 
 // Pregătim date pentru dropdown-uri
 $edu_nonce = wp_create_nonce('edu_nonce');
 $tutor_args = ['role'=>'tutor','orderby'=>'display_name','order'=>'ASC','number'=>-1];
 $all_tutors = get_users($tutor_args);
+
+// Counties & cities for school cascade in modal
+$all_counties_modal = $wpdb->get_results("SELECT id, name FROM {$tbl_counties} ORDER BY name ASC");
+$all_cities_modal   = $wpdb->get_results("SELECT id, name, county_id FROM {$tbl_cities} ORDER BY name ASC");
 
 $prof_status = [
   'in_asteptare'         => 'În așteptare',
@@ -398,7 +406,7 @@ $COLS = [
       </button>
 
       <button id="es-open-add-gen" type="button"
-      class="ml-2 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white rounded-md bg-indigo-600 hover:bg-indigo-700">
+      class="inline-flex items-center gap-2 px-3 py-2 ml-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1 1 0 0 1 1 1v8h8a1 1 0 1 1 0 2h-8v8a1 1 0 1 1-2 0v-8H3a1 1 0 1 1 0-2h8V3a1 1 0 0 1 1-1Z"/></svg>
         Generație
       </button>
@@ -432,9 +440,9 @@ $COLS = [
 <!-- Modal Add/Edit profesor -->
 <div id="es-prof-modal" class="fixed inset-0 z-[100] hidden">
   <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
-  <div class="relative max-w-5xl mx-auto my-8">
-    <div class="mx-4 overflow-hidden bg-white border shadow-xl rounded-2xl border-slate-200">
-      <div class="flex items-center justify-between px-5 py-4 border-b bg-slate-50 border-slate-200">
+  <div class="relative flex items-start justify-center mt-[2.5vh]" style="height:95vh">
+    <div class="flex flex-col w-full max-w-5xl mx-4 bg-white border shadow-xl rounded-2xl border-slate-200" style="max-height:95vh">
+      <div class="flex items-center justify-between px-5 py-4 border-b shrink-0 bg-slate-50 border-slate-200 rounded-t-2xl">
         <h3 id="es-prof-modal-title" class="text-base font-semibold text-slate-900">Adaugă profesor</h3>
         <button type="button" id="es-close-prof" class="p-2 text-red-700 hover:text-slate-700">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5">
@@ -443,202 +451,240 @@ $COLS = [
         </button>
       </div>
 
-      <form id="es-prof-form" class="px-5 py-4 mobile:overflow-y-scroll mobile:max-h-[85vh]" enctype="multipart/form-data">
-        <!-- ajax requirement -->
+      <form id="es-prof-form" class="flex flex-col flex-1 min-h-0" enctype="multipart/form-data">
         <input type="hidden" name="nonce" value="<?php echo esc_attr($edu_nonce); ?>">
         <input type="hidden" name="user_role" value="profesor">
-        <input type="hidden" id="es-user-id" name="user_id" value=""> <!-- gol => ADD, setat => EDIT -->
+        <input type="hidden" id="es-user-id" name="user_id" value="">
         <?php if ($is_tutor && !$is_admin): ?>
           <input type="hidden" name="assigned_tutor_id" value="<?php echo (int)$uid; ?>">
         <?php endif; ?>
 
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <!-- Nume / Prenume / Email -->
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Prenume</label>
-            <input name="first_name" type="text" required class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-          </div>
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Nume</label>
-            <input name="last_name" type="text" required class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-          </div>
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Email (va fi și user_login)</label>
-            <input name="email" type="email" required class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-          </div>
-
-          <!-- Telefon / Status / Nivel -->
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Telefon</label>
-            <input name="phone" type="text" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-          </div>
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Status profesor</label>
-            <select name="user_status_profesor" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-              <option value="">— Selectează —</option>
-              <?php foreach ($prof_status as $k=>$lab): ?>
-                <option value="<?php echo esc_attr($k); ?>"><?php echo esc_html($lab); ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Nivel predare</label>
-            <select name="nivel_predare" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-              <option value="">— Selectează —</option>
-              <?php foreach ($nivel_opts as $k=>$lab): ?>
-                <option value="<?php echo esc_attr($k); ?>"><?php echo esc_html($lab); ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-
-          <!-- Materie / Materie altă / Cod SLF -->
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Materia predată</label>
-            <select id="es-materia" name="materia_predata" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-              <option value="">— Selectează —</option>
-              <?php foreach ($materii_default as $m): ?>
-                <option value="<?php echo esc_attr($m); ?>"><?php echo esc_html($m); ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-          <div id="es-materia-alta-wrap" class="hidden">
-            <label class="block mb-1 text-xs font-medium text-slate-600">Materia (altă)</label>
-            <input id="es-materia-alta" name="materia_alta" type="text" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-          </div>
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Cod SLF</label>
-            <input name="cod_slf" type="text" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-          </div>
-
-          <!-- Statut / Calificare / Experiență -->
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Statut</label>
-            <select name="statut_prof" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-              <option value="">— Selectează —</option>
-              <?php foreach ($statut_prof_opts as $st): ?>
-                <option value="<?php echo esc_attr($st); ?>"><?php echo esc_html($st); ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Calificare</label>
-            <select name="calificare" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-              <option value="">— Selectează —</option>
-              <?php foreach ($calificare_opts as $st): ?>
-                <option value="<?php echo esc_attr($st); ?>"><?php echo esc_html($st); ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Experiență</label>
-            <select name="experienta" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-              <option value="">— Selectează —</option>
-              <?php foreach ($experienta_opts as $st): ?>
-                <option value="<?php echo esc_attr($st); ?>"><?php echo esc_html($st); ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-
-          <!-- RSOI / Generație / An program -->
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Segment RSOI</label>
-            <select name="segment_rsoi" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-              <option value="">— Selectează —</option>
-              <option value="ED">ED</option>
-              <option value="YP">YP</option>
-              <option value="CC">CC</option>
-            </select>
-          </div>
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Generație (Teach)</label>
-            <input name="generatie" type="text" placeholder="ex: G12" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-          </div>
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">An program</label>
-            <select name="an_program" id="es-an-program" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-              <option value="">— Selectează —</option>
-              <option value="An 1">An 1</option>
-              <option value="An 2">An 2</option>
-              <option value="ALU">ALU</option>
-              <option value="Extern">Extern</option>
-              <option value="Other">Other</option>
-            </select>
-          </div>
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Cohorte</label>
-            <select name="cohorte" id="es-cohorte" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-              <option value="">— Selectează —</option>
-              <option value="CORE">CORE</option>
-              <option value="Scoli Strategice">Școli Strategice</option>
-            </select>
-          </div>
-
-          <!-- Tutor coordonator / Mentori -->
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Tutor coordonator</label>
-            <select name="assigned_tutor_id" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300" <?php echo ($is_tutor && !$is_admin) ? 'disabled' : '';?>>
-              <option value="">— Selectează —</option>
-              <?php foreach ($all_tutors as $t): ?>
-                <option value="<?php echo (int)$t->ID; ?>" <?php echo ($is_tutor && !$is_admin && (int)$t->ID === $uid) ? 'selected' : ''; ?>>
-                  <?php echo esc_html($t->display_name ?: ($t->first_name.' '.$t->last_name)); ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Mentor SEL</label>
-            <select name="mentor_sel" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-              <option value="">— Selectează —</option>
-              <?php foreach ($all_tutors as $t): ?>
-                <option value="<?php echo (int)$t->ID; ?>"><?php echo esc_html($t->display_name); ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Mentor LIT</label>
-            <select name="mentor_literatie" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-              <option value="">— Selectează —</option>
-              <?php foreach ($all_tutors as $t): ?>
-                <option value="<?php echo (int)$t->ID; ?>"><?php echo esc_html($t->display_name); ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Mentor NUM</label>
-            <select name="mentor_numeratie" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-              <option value="">— Selectează —</option>
-              <?php foreach ($all_tutors as $t): ?>
-                <option value="<?php echo (int)$t->ID; ?>"><?php echo esc_html($t->display_name); ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-
-          <!-- Școli -->
-          <div class="md:col-span-3">
-            <label class="block mb-1 text-xs font-medium text-slate-600">Școli atribuite</label>
-            <div class="flex items-center gap-2">
-              <input id="es-school-search" type="text" placeholder="Caută după nume/cod SIIIR/oras/județ..."
-                      class="flex-1 px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
-              <button id="es-school-search-btn" type="button"
-                      class="px-3 py-2 text-sm font-medium text-white rounded-xl bg-slate-700 hover:bg-slate-800">Caută</button>
+        <div class="flex-1 px-5 py-4 overflow-y-auto">
+          <!-- Row 1: Cod SLF, Segment RSOI, Generatie (Teach), An program — 4 cols -->
+          <div class="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <div>
+              <label class="block mb-1 text-xs font-medium text-slate-600">Cod SLF</label>
+              <input name="cod_slf" type="text" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
             </div>
-            <div id="es-school-results" class="hidden mt-2 overflow-hidden border divide-y rounded-xl border-slate-200 divide-slate-200"></div>
-            <div id="es-school-selected" class="flex flex-wrap gap-2 mt-3"></div>
+            <div>
+              <label class="block mb-1 text-xs font-medium text-slate-600">Segment RSOI</label>
+              <select name="segment_rsoi" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+                <option value="">— Selectează —</option>
+                <option value="ED">ED</option>
+                <option value="YP">YP</option>
+                <option value="CC">CC</option>
+              </select>
+            </div>
+            <div>
+              <label class="block mb-1 text-xs font-medium text-slate-600">Generație (Teach)</label>
+              <input name="generatie" type="text" placeholder="ex: G12" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+            </div>
+            <div>
+              <label class="block mb-1 text-xs font-medium text-slate-600">An program</label>
+              <select name="an_program" id="es-an-program" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+                <option value="">— Selectează —</option>
+                <option value="An 1">An 1</option>
+                <option value="An 2">An 2</option>
+                <option value="ALU">ALU</option>
+                <option value="Extern">Extern</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
           </div>
 
-          <!-- Imagine profil + reset -->
-          <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Imagine profil</label>
-            <input name="profile_image" type="file" accept="image/*" class="block w-full text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-emerald-50 file:px-3 file:py-2 file:text-emerald-700">
-            <p id="es-current-avatar" class="mt-2 text-xs text-slate-500"></p>
+          <!-- Remaining rows: 3 cols -->
+          <div class="grid grid-cols-1 gap-4 mt-4 md:grid-cols-3">
+            <!-- Prenume / Nume / Email -->
+            <div>
+              <label class="block mb-1 text-xs font-medium text-slate-600">Prenume</label>
+              <input name="first_name" type="text" required class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+            </div>
+            <div>
+              <label class="block mb-1 text-xs font-medium text-slate-600">Nume</label>
+              <input name="last_name" type="text" required class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+            </div>
+            <div>
+              <label class="block mb-1 text-xs font-medium text-slate-600">Email (va fi și user_login)</label>
+              <div class="relative">
+                <input name="email" id="es-prof-email" type="email" required class="w-full px-3 py-2 pr-9 text-sm bg-white border rounded-xl border-slate-300">
+                <span id="es-email-ok" class="absolute hidden -translate-y-1/2 right-3 top-1/2 text-emerald-500">
+                  <svg class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4-4a.75.75 0 011.06-1.06l3.366 3.365 7.506-9.879a.75.75 0 011.052-.143z" clip-rule="evenodd"/></svg>
+                </span>
+              </div>
+              <p id="es-email-err" class="hidden mt-1 text-xs text-rose-600"></p>
+            </div>
+
+            <!-- Telefon / Status / Nivel -->
+            <div>
+              <label class="block mb-1 text-xs font-medium text-slate-600">Telefon</label>
+              <input name="phone" type="text" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+            </div>
+            <div>
+              <label class="block mb-1 text-xs font-medium text-slate-600">Status profesor</label>
+              <select name="user_status_profesor" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+                <option value="">— Selectează —</option>
+                <?php foreach ($prof_status as $k=>$lab): ?>
+                  <option value="<?php echo esc_attr($k); ?>"><?php echo esc_html($lab); ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div>
+              <label class="block mb-1 text-xs font-medium text-slate-600">Nivel predare</label>
+              <select name="nivel_predare" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+                <option value="">— Selectează —</option>
+                <?php foreach ($nivel_opts as $k=>$lab): ?>
+                  <option value="<?php echo esc_attr($k); ?>"><?php echo esc_html($lab); ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+
+            <!-- Materie / Materie altă / Statut -->
+            <div>
+              <label class="block mb-1 text-xs font-medium text-slate-600">Materia predată</label>
+              <select id="es-materia" name="materia_predata" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+                <option value="">— Selectează —</option>
+                <?php foreach ($materii_default as $m): ?>
+                  <option value="<?php echo esc_attr($m); ?>"><?php echo esc_html($m); ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div id="es-materia-alta-wrap" class="hidden">
+              <label class="block mb-1 text-xs font-medium text-slate-600">Materia (altă)</label>
+              <input id="es-materia-alta" name="materia_alta" type="text" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+            </div>
+            <div>
+              <label class="block mb-1 text-xs font-medium text-slate-600">Statut</label>
+              <select name="statut_prof" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+                <option value="">— Selectează —</option>
+                <?php foreach ($statut_prof_opts as $st): ?>
+                  <option value="<?php echo esc_attr($st); ?>"><?php echo esc_html($st); ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+
+            <!-- Calificare / Experienta / Cohorte -->
+            <div>
+              <label class="block mb-1 text-xs font-medium text-slate-600">Calificare</label>
+              <select name="calificare" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+                <option value="">— Selectează —</option>
+                <?php foreach ($calificare_opts as $st): ?>
+                  <option value="<?php echo esc_attr($st); ?>"><?php echo esc_html($st); ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div>
+              <label class="block mb-1 text-xs font-medium text-slate-600">Experiență</label>
+              <select name="experienta" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+                <option value="">— Selectează —</option>
+                <?php foreach ($experienta_opts as $st): ?>
+                  <option value="<?php echo esc_attr($st); ?>"><?php echo esc_html($st); ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div>
+              <label class="block mb-1 text-xs font-medium text-slate-600">Cohorte</label>
+              <select name="cohorte" id="es-cohorte" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+                <option value="">— Selectează —</option>
+                <option value="CORE">CORE</option>
+                <option value="Scoli Strategice">Școli Strategice</option>
+              </select>
+            </div>
+
+            <!-- Tutor / Mentori -->
+            <div>
+              <label class="block mb-1 text-xs font-medium text-slate-600">Tutor coordonator</label>
+              <select name="assigned_tutor_id" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300" <?php echo ($is_tutor && !$is_admin) ? 'disabled' : '';?>>
+                <option value="">— Selectează —</option>
+                <?php foreach ($all_tutors as $t): ?>
+                  <option value="<?php echo (int)$t->ID; ?>" <?php echo ($is_tutor && !$is_admin && (int)$t->ID === $uid) ? 'selected' : ''; ?>>
+                    <?php echo esc_html($t->display_name ?: ($t->first_name.' '.$t->last_name)); ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div>
+              <label class="block mb-1 text-xs font-medium text-slate-600">Mentor SEL</label>
+              <select name="mentor_sel" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+                <option value="">— Selectează —</option>
+                <?php foreach ($all_tutors as $t): ?>
+                  <option value="<?php echo (int)$t->ID; ?>"><?php echo esc_html($t->display_name); ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div>
+              <label class="block mb-1 text-xs font-medium text-slate-600">Mentor LIT</label>
+              <select name="mentor_literatie" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+                <option value="">— Selectează —</option>
+                <?php foreach ($all_tutors as $t): ?>
+                  <option value="<?php echo (int)$t->ID; ?>"><?php echo esc_html($t->display_name); ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div>
+              <label class="block mb-1 text-xs font-medium text-slate-600">Mentor NUM</label>
+              <select name="mentor_numeratie" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+                <option value="">— Selectează —</option>
+                <?php foreach ($all_tutors as $t): ?>
+                  <option value="<?php echo (int)$t->ID; ?>"><?php echo esc_html($t->display_name); ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+
+            <!-- Școli atribuite: county -> city -> school cascade -->
+            <div class="md:col-span-3">
+              <label class="block mb-2 text-xs font-medium text-slate-600">Școli atribuite</label>
+              <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div>
+                  <label class="block mb-1 text-xs text-slate-500">Județ</label>
+                  <select id="es-school-county" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+                    <option value="">— Toate județele —</option>
+                    <?php foreach ($all_counties_modal as $c): ?>
+                      <option value="<?php echo (int)$c->id; ?>"><?php echo esc_html($c->name); ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </div>
+                <div class="relative" id="es-city-dd-wrap">
+                  <label class="block mb-1 text-xs text-slate-500">Oraș</label>
+                  <div id="es-city-dd-trigger" class="flex items-center justify-between w-full px-3 py-2 text-sm bg-white border cursor-pointer rounded-xl border-slate-300 hover:border-slate-400">
+                    <span id="es-city-dd-label" class="text-slate-500">— Selectează județ —</span>
+                    <svg class="w-4 h-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+                  </div>
+                  <input type="hidden" id="es-school-city" name="_city_filter" value="">
+                  <div id="es-city-dropdown" class="hidden absolute z-30 w-full mt-1 bg-white border shadow-lg rounded-xl border-slate-200" style="min-width:220px">
+                    <div class="p-2 border-b border-slate-100">
+                      <input id="es-city-dd-search" type="text" placeholder="Caută oraș..."
+                             class="w-full px-3 py-1.5 text-sm bg-white border rounded-lg border-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-500">
+                    </div>
+                    <div id="es-city-dd-list" class="overflow-y-auto max-h-48"></div>
+                    <div id="es-city-dd-empty" class="hidden px-3 py-3 text-xs text-center text-slate-500">Niciun rezultat.</div>
+                  </div>
+                </div>
+                <div class="relative" id="es-school-dd-wrap">
+                  <label class="block mb-1 text-xs text-slate-500">Școală</label>
+                  <div id="es-school-dd-trigger" class="flex items-center justify-between w-full px-3 py-2 text-sm bg-white border cursor-pointer rounded-xl border-slate-300 hover:border-slate-400">
+                    <span class="text-slate-500">— Selectează școli —</span>
+                    <svg class="w-4 h-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+                  </div>
+                  <div id="es-school-dropdown" class="hidden absolute z-30 w-full mt-1 bg-white border shadow-lg rounded-xl border-slate-200" style="min-width:320px">
+                    <div class="p-2 border-b border-slate-100">
+                      <input id="es-school-dd-search" type="text" placeholder="Caută școală..."
+                             class="w-full px-3 py-1.5 text-sm bg-white border rounded-lg border-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-500">
+                    </div>
+                    <div id="es-school-dd-list" class="overflow-y-auto max-h-48"></div>
+                    <div id="es-school-dd-empty" class="hidden px-3 py-3 text-xs text-center text-slate-500">Niciun rezultat. Selectează un județ pentru a vedea școlile.</div>
+                  </div>
+                </div>
+              </div>
+              <div id="es-school-selected" class="mt-3 space-y-1"></div>
+            </div>
           </div>
-          <div class="flex items-center gap-2">
-            <input id="es-send-reset" type="checkbox" name="send_reset_link" value="1" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
-            <label for="es-send-reset" class="text-sm text-slate-700">Trimite email de resetare parolă după creare</label>
-          </div>
+
+          <!-- Hidden fields (Imagine profil + reset) -->
+          <input name="profile_image" type="file" accept="image/*" class="hidden" id="es-profile-image-hidden">
+          <p id="es-current-avatar" class="hidden"></p>
         </div>
 
-        <div class="flex items-center justify-end gap-2 pt-5 mt-5 border-t border-slate-200">
+        <div class="flex items-center justify-end gap-2 px-5 py-4 border-t shrink-0 bg-white border-slate-200 rounded-b-2xl">
           <button type="button" id="es-cancel-prof" class="px-3 py-2 text-sm bg-white border rounded-xl hover:bg-slate-50 border-slate-300">Anulează</button>
           <button id="es-submit-prof" type="submit" class="px-3 py-2 text-sm text-white rounded-xl bg-emerald-600 hover:bg-emerald-700">
             Salvează
@@ -690,7 +736,7 @@ $COLS = [
           <!-- 2) Nivel (derivat din profesor) -->
           <div>
             <label class="block mb-1 text-xs font-medium text-slate-600">Nivel (derivat din profesor)</label>
-            <div class="px-3 py-2 text-sm bg-slate-50 border rounded-xl border-slate-200 text-slate-800" id="es-gen-level-ro">—</div>
+            <div class="px-3 py-2 text-sm border bg-slate-50 rounded-xl border-slate-200 text-slate-800" id="es-gen-level-ro">—</div>
           </div>
 
           <!-- 3) Clase disponibile pentru nivel (informativ) -->
@@ -708,18 +754,17 @@ $COLS = [
                    required class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
           </div>
 
-          <!-- 5) An generație (auto, nu se poate edita) -->
+          <!-- 5) An generație (dropdown: anul curent + următorii 2) -->
           <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">An (auto)</label>
-            <input id="es-gen-year-display" type="text" disabled
-                   class="w-full px-3 py-2 text-sm bg-slate-50 border rounded-xl border-slate-200">
-            <p class="mt-1 text-xs text-slate-500">Se auto-completează cu anul școlar curent; salvat pe server.</p>
+            <label class="block mb-1 text-xs font-medium text-slate-600">An școlar</label>
+            <select id="es-gen-year-display" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+            </select>
           </div>
         </div>
 
         <div class="flex items-center justify-end gap-2 pt-5 mt-5 border-t border-slate-200">
           <button type="button" id="es-cancel-gen" class="px-3 py-2 text-sm bg-white border rounded-xl hover:bg-slate-50 border-slate-300">Anulează</button>
-          <button id="es-submit-gen" type="submit" class="px-3 py-2 text-sm text-white rounded-xl bg-indigo-600 hover:bg-indigo-700">
+          <button id="es-submit-gen" type="submit" class="px-3 py-2 text-sm text-white bg-indigo-600 rounded-xl hover:bg-indigo-700">
             Salvează generația
           </button>
         </div>
@@ -748,7 +793,7 @@ $COLS = [
 </div>
 
 <section class="px-6 mt-4 mb-6 mobile:px-2">
-  <form method="get" class="grid items-end grid-cols-1 gap-3 md:grid-cols-12">
+  <form method="get" action="<?php echo esc_url(home_url('/profesori/')); ?>" class="grid items-end grid-cols-1 gap-3 md:grid-cols-12">
     <!-- Căutare -->
     <div class="relative md:col-span-3">
       <label class="block mb-1 text-xs font-medium text-slate-600">Căutare (nume/email)</label>
@@ -768,15 +813,40 @@ $COLS = [
           class="absolute z-20 hidden w-full mt-1 overflow-auto bg-white border rounded-lg shadow-lg max-h-72 border-slate-200"></div>
     </div>
 
-    <!-- Nivel -->
-    <div class="md:col-span-1">
+    <!-- Nivel (multiselect) -->
+    <div class="relative md:col-span-2" id="prof-nivel-wrap">
       <label class="block mb-1 text-xs font-medium text-slate-600">Nivel predare</label>
-      <select name="nivel" class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
-        <option value="" class="text-xxs">— Oricare —</option>
-        <?php foreach (['prescolar'=>'Preșcolar','primar'=>'Primar','gimnazial'=>'Gimnazial','liceu'=>'Liceu'] as $k=>$lab): ?>
-          <option value="<?php echo esc_attr($k); ?>" <?php selected($nivel===$k); ?>><?php echo esc_html($lab); ?></option>
+      <?php $prof_nivel_opts = ['prescolar'=>'Preșcolar','primar'=>'Primar','gimnazial'=>'Gimnazial','liceu'=>'Liceu']; ?>
+      <div id="prof-nivel-inputs">
+        <?php foreach ($nivel_arr as $v): ?>
+          <input type="hidden" name="nivel[]" value="<?php echo esc_attr($v); ?>">
         <?php endforeach; ?>
-      </select>
+      </div>
+      <div id="prof-nivel-trigger" class="flex items-center gap-1 w-full min-h-[38px] px-3 py-1.5 text-sm bg-white border shadow-sm rounded-xl border-slate-300 cursor-pointer hover:border-slate-400 flex-wrap">
+        <?php if (empty($nivel_arr)): ?>
+          <span class="ms-placeholder text-slate-400">— Oricare —</span>
+        <?php else: ?>
+          <?php foreach ($nivel_arr as $v): ?>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-200 ms-tag" data-val="<?php echo esc_attr($v); ?>">
+              <?php echo esc_html($prof_nivel_opts[$v] ?? $v); ?>
+              <button type="button" class="ms-remove hover:text-red-600">&times;</button>
+            </span>
+          <?php endforeach; ?>
+        <?php endif; ?>
+        <svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </div>
+      <div id="prof-nivel-dropdown" class="hidden absolute z-30 w-full mt-1 bg-white border shadow-lg rounded-xl border-slate-200 py-1" style="min-width:200px">
+        <?php foreach ($prof_nivel_opts as $k => $lab): ?>
+          <div class="ms-opt flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-slate-50" data-val="<?php echo esc_attr($k); ?>">
+            <span class="inline-flex items-center justify-center w-4 h-4 rounded border ms-check <?php echo in_array($k, $nivel_arr, true) ? 'bg-sky-600 border-sky-600' : 'bg-white border-slate-300'; ?>">
+              <?php if (in_array($k, $nivel_arr, true)): ?>
+                <svg class="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <?php endif; ?>
+            </span>
+            <span><?php echo esc_html($lab); ?></span>
+          </div>
+        <?php endforeach; ?>
+      </div>
     </div>
 
     <!-- Statut -->
@@ -802,7 +872,7 @@ $COLS = [
     </div>
 
     <!-- Județ -->
-    <div class="md:col-span-2">
+    <div class="md:col-span-1">
       <label class="block mb-1 text-xs font-medium text-slate-600">Județ</label>
       <select name="county" class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
         <option value="" class="text-xs">— Orice județ —</option>
@@ -830,6 +900,17 @@ $COLS = [
         <option value="" class="text-xs">— Toate —</option>
         <?php foreach ($rsoi_list as $rv): ?>
           <option value="<?php echo esc_attr($rv); ?>" <?php selected($rsoi===$rv); ?>><?php echo esc_html($rv); ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+
+    <!-- Tutor -->
+    <div class="md:col-span-1">
+      <label class="block mb-1 text-xs font-medium text-slate-600">Tutor</label>
+      <select name="tutor" class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
+        <option value="" class="text-xs">— Toți —</option>
+        <?php foreach ($all_tutors as $t): ?>
+          <option value="<?php echo (int)$t->ID; ?>" <?php selected($tutor_f===(int)$t->ID); ?>><?php echo esc_html(es_user_fullname($t)); ?></option>
         <?php endforeach; ?>
       </select>
     </div>
@@ -867,12 +948,18 @@ $COLS = [
     <table class="relative w-full text-sm table-auto" id="prof-table">
       <thead class="sticky top-0 bg-sky-800 backdrop-blur">
         <tr class="text-white">
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200">Profesor</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200 cursor-pointer select-none hover:bg-sky-900" data-sort="profesor">
+            <span class="inline-flex items-center gap-1">Profesor <svg class="w-3 h-3 opacity-40 es-sort-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"/></svg></span>
+          </th>
           <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="tutor">Tutor</th>
           <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="cod">Cod SLF</th>
           <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="statut">Statut</th>
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="nivel">Nivel</th>
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="anprog">An program</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200 cursor-pointer select-none hover:bg-sky-900" data-col="nivel" data-sort="nivel">
+            <span class="inline-flex items-center gap-1">Nivel <svg class="w-3 h-3 opacity-40 es-sort-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"/></svg></span>
+          </th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200 cursor-pointer select-none hover:bg-sky-900" data-col="anprog" data-sort="anprog">
+            <span class="inline-flex items-center gap-1">An program <svg class="w-3 h-3 opacity-40 es-sort-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"/></svg></span>
+          </th>
           <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="rsoi">RSOI</th>
           <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="teach">Teach</th>
           <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="materie">Materie</th>
@@ -969,7 +1056,7 @@ $COLS = [
                 $primary_gen_id = (int)$gens[0]->id;
               }
             ?>
-            <tr class="transition-colors border-b border-slate-200 hover:bg-slate-50 odd:bg-white even:bg-slate-200" data-search="<?php echo esc_attr($search_blob); ?>">
+            <tr class="transition-colors border-b border-slate-200 hover:bg-slate-50 odd:bg-white even:bg-slate-200" data-search="<?php echo esc_attr($search_blob); ?>" data-sort-profesor="<?php echo esc_attr(mb_strtolower($name)); ?>" data-sort-anprog="<?php echo esc_attr(mb_strtolower($an_prog ?: 'zzz')); ?>" data-sort-nivel="<?php echo esc_attr(mb_strtolower(es_level_label($nivel_val))); ?>">
               <!-- Profesor -->
               <td class="px-3 py-3 align-center">
                 <div class="flex items-center gap-3">
@@ -1032,7 +1119,7 @@ $COLS = [
                 <?php if ($school_count): ?>
                   <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-sky-50 text-sky-800 ring-1 ring-sky-200" title="<?php echo $school_title; ?>">
                     <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 1.5 9 12 15 22.5 9 12 3Z"/><path d="M3 10.5v5.25L12 21l9-5.25V10.5" opacity=".4"/></svg>
-                    <?php echo (int)$school_count; ?> școli
+                    <?php echo (int)$school_count; ?>
                   </span>
                 <?php else: ?>
                   <span class="text-slate-500">—</span>
@@ -1098,7 +1185,7 @@ $COLS = [
                   if ($school_count) {
                     $in3 = implode(',', array_fill(0, $school_count, '%d'));
                     $rows_det = $wpdb->get_results($wpdb->prepare("
-                      SELECT s.id, s.name, s.code AS cod, c.name AS city, j.name AS county
+                      SELECT s.id, s.name, s.cod, c.name AS city, j.name AS county
                       FROM {$tbl_schools} s
                       LEFT JOIN {$tbl_cities} c  ON s.city_id = c.id
                       LEFT JOIN {$tbl_counties} j ON c.county_id = j.id
@@ -1219,6 +1306,61 @@ $COLS = [
   </div>
 <?php endif; ?>
 
+<!-- JS: Nivel multiselect dropdown -->
+<script>
+(function(){
+  const prefix = 'prof-nivel';
+  const inputName = 'nivel[]';
+  const options = <?php echo wp_json_encode($prof_nivel_opts, JSON_UNESCAPED_UNICODE); ?>;
+  let selected = <?php echo wp_json_encode(array_values($nivel_arr)); ?>;
+  const placeholder = '— Oricare —';
+
+  const wrap     = document.getElementById(prefix + '-wrap');
+  const trigger  = document.getElementById(prefix + '-trigger');
+  const dropdown = document.getElementById(prefix + '-dropdown');
+  const inputs   = document.getElementById(prefix + '-inputs');
+  if (!wrap || !trigger || !dropdown || !inputs) return;
+
+  const checkSvg = '<svg class="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>';
+  const arrow = '<svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>';
+
+  function render(){
+    inputs.innerHTML = selected.map(v => `<input type="hidden" name="${inputName}" value="${v}">`).join('');
+    const tags = selected.map(v => {
+      const lab = options[v] || v;
+      return `<span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-200 ms-tag" data-val="${v}">
+        ${lab}<button type="button" class="ms-remove hover:text-red-600">&times;</button></span>`;
+    }).join('');
+    trigger.innerHTML = selected.length ? tags + arrow : `<span class="ms-placeholder text-slate-400">${placeholder}</span>` + arrow;
+    dropdown.querySelectorAll('.ms-opt').forEach(opt => {
+      const v = opt.dataset.val, isOn = selected.includes(v);
+      const box = opt.querySelector('.ms-check');
+      box.className = 'inline-flex items-center justify-center w-4 h-4 rounded border ms-check ' + (isOn ? 'bg-sky-600 border-sky-600' : 'bg-white border-slate-300');
+      box.innerHTML = isOn ? checkSvg : '';
+    });
+  }
+  trigger.addEventListener('click', (e) => {
+    if (e.target.closest('.ms-remove')) {
+      const tag = e.target.closest('.ms-tag');
+      if (tag?.dataset.val) { selected = selected.filter(v => v !== tag.dataset.val); render(); }
+      return;
+    }
+    dropdown.classList.toggle('hidden');
+  });
+  dropdown.addEventListener('click', (e) => {
+    const opt = e.target.closest('.ms-opt');
+    if (!opt) return;
+    const val = opt.dataset.val;
+    if (selected.includes(val)) selected = selected.filter(v => v !== val);
+    else selected.push(val);
+    render();
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#' + prefix + '-wrap')) dropdown.classList.add('hidden');
+  });
+})();
+</script>
+
 <!-- JS: toggle coloane (persistă în localStorage) -->
 <script>
 (function(){
@@ -1263,6 +1405,54 @@ $COLS = [
       state[k] = cb.checked;
       localStorage.setItem(KEY, JSON.stringify(state));
       apply(state);
+    });
+  });
+})();
+</script>
+
+<!-- JS: Table sorting (Profesor, An program, Nivel) -->
+<script>
+(function(){
+  const table = document.getElementById('prof-table');
+  if (!table) return;
+  const tbody = table.querySelector('tbody');
+  if (!tbody) return;
+
+  const sortHeaders = table.querySelectorAll('th[data-sort]');
+  let currentSort = { key: null, asc: true };
+
+  sortHeaders.forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.getAttribute('data-sort');
+      if (currentSort.key === key) {
+        currentSort.asc = !currentSort.asc;
+      } else {
+        currentSort.key = key;
+        currentSort.asc = true;
+      }
+
+      // Update icons
+      sortHeaders.forEach(h => {
+        const icon = h.querySelector('.es-sort-icon');
+        if (!icon) return;
+        if (h.getAttribute('data-sort') === key) {
+          icon.style.opacity = '1';
+          icon.style.transform = currentSort.asc ? 'rotate(0deg)' : 'rotate(180deg)';
+        } else {
+          icon.style.opacity = '0.4';
+          icon.style.transform = 'rotate(0deg)';
+        }
+      });
+
+      // Sort rows
+      const rows = Array.from(tbody.querySelectorAll('tr[data-search]'));
+      const attr = 'data-sort-' + key;
+      rows.sort((a, b) => {
+        const va = (a.getAttribute(attr) || '').toLowerCase();
+        const vb = (b.getAttribute(attr) || '').toLowerCase();
+        return currentSort.asc ? va.localeCompare(vb, 'ro') : vb.localeCompare(va, 'ro');
+      });
+      rows.forEach(r => tbody.appendChild(r));
     });
   });
 })();
@@ -1394,8 +1584,24 @@ $COLS = [
     const submitBtn = $('#es-submit-prof');
 
     const selectedWrap = $('#es-school-selected');
-    const resultsWrap  = $('#es-school-results');
-    const searchInput  = $('#es-school-search');
+
+    // School cascade elements
+    const schoolCountySel = $('#es-school-county');
+    const schoolCityHid   = $('#es-school-city');
+    const cityDdTrigger   = $('#es-city-dd-trigger');
+    const cityDdLabel     = $('#es-city-dd-label');
+    const cityDropdown    = $('#es-city-dropdown');
+    const cityDdSearch    = $('#es-city-dd-search');
+    const cityDdList      = $('#es-city-dd-list');
+    const cityDdEmpty     = $('#es-city-dd-empty');
+    const schoolDdTrigger = $('#es-school-dd-trigger');
+    const schoolDropdown  = $('#es-school-dropdown');
+    const schoolDdSearch  = $('#es-school-dd-search');
+    const schoolDdList    = $('#es-school-dd-list');
+    const schoolDdEmpty   = $('#es-school-dd-empty');
+
+    // Cities data embedded from PHP
+    const allCitiesData = <?php echo wp_json_encode(array_map(function($c){ return ['id'=>(int)$c->id,'name'=>$c->name,'county_id'=>(int)$c->county_id]; }, $all_cities_modal)); ?>;
 
     $('#es-open-add-prof')?.addEventListener('click', () => openAddModal());
     $('#es-close-prof')?.addEventListener('click', closeModal);
@@ -1466,9 +1672,9 @@ $COLS = [
       const avatar = $('#es-current-avatar');
       avatar.textContent = data.profile_image_url ? 'Imagine curentă setată.' : 'Fără imagine de profil.';
 
-      if (Array.isArray(data.schools_detailed)) {
+      if (Array.isArray(data.schools_detailed) && data.schools_detailed.length) {
         data.schools_detailed.forEach(addSelectedSchool);
-      } else if (Array.isArray(data.assigned_school_ids)) {
+      } else if (Array.isArray(data.assigned_school_ids) && data.assigned_school_ids.length) {
         data.assigned_school_ids.forEach(id => addSelectedSchool({id, name: 'Școală #'+id, city:'', county:'', cod:''}));
       }
       show(modal);
@@ -1492,8 +1698,14 @@ $COLS = [
     function resetForm(){
       form.reset();
       selectedWrap.innerHTML = '';
-      hide(resultsWrap);
+      // Reset cascade
+      if (schoolCountySel) schoolCountySel.value = '';
+      resetCityDropdown();
+      if (schoolDdList) schoolDdList.innerHTML = '';
+      hide(schoolDropdown);
+      schoolDdOpen = false;
       toggleAlta();
+      resetEmailValidation();
     }
 
     // Materia „Alta”
@@ -1501,77 +1713,268 @@ $COLS = [
     function toggleAlta(){ (materiaSel?.value === 'Alta') ? show(materiaAltaWrap) : hide(materiaAltaWrap); }
     materiaSel?.addEventListener('change', toggleAlta);
 
-    // ====== Școli (caută + selectează) ======
+    // ====== Școli (cascade: județ -> oraș -> dropdown multiselect cu search) ======
     function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
 
     function addSelectedSchool(item){
       if (!item || !item.id) return;
       if ($(`[data-school-id="${item.id}"]`, selectedWrap)) return;
-      const tag = document.createElement('span');
-      tag.className = 'inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-sky-50 text-sky-800 ring-1 ring-sky-200';
-      tag.setAttribute('data-school-id', item.id);
-      tag.innerHTML = `
+      const row = document.createElement('div');
+      row.className = 'flex items-center justify-between px-3 py-2 text-sm bg-sky-50 rounded-lg ring-1 ring-sky-200';
+      row.setAttribute('data-school-id', item.id);
+      const loc = [item.city, item.county].filter(Boolean).join(' / ');
+      row.innerHTML = `
         <input type="hidden" name="assigned_school_ids[]" value="${item.id}">
-        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 1.5 9 12 15 22.5 9 12 3Z"/><path d="M3 10.5v5.25L12 21l9-5.25V10.5" opacity=".4"/></svg>
-        <span class="font-medium">${escapeHtml(item.name||('Școală #'+item.id))}</span>
-        <span class="text-slate-500">•</span>
-        <span class="text-slate-500">${escapeHtml(item.city||'')}${item.city&&item.county?' / ':''}${escapeHtml(item.county||'')}</span>
-        <button type="button" class="ml-1 rounded hover:bg-sky-100 p-0.5" aria-label="Remove">
-          <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6l12 12M6 18 18 6"/></svg>
+        <div class="flex items-center gap-2 min-w-0">
+          <svg class="w-4 h-4 shrink-0 text-sky-600" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 1.5 9 12 15 22.5 9 12 3Z"/><path d="M3 10.5v5.25L12 21l9-5.25V10.5" opacity=".4"/></svg>
+          <span class="font-medium truncate text-sky-900">${escapeHtml(item.name||('Școală #'+item.id))}</span>
+          ${loc ? `<span class="text-xs truncate text-sky-600">${escapeHtml(loc)}</span>` : ''}
+          ${item.cod ? `<span class="text-xs text-sky-500">cod: ${escapeHtml(item.cod)}</span>` : ''}
+        </div>
+        <button type="button" class="p-1 ml-2 rounded-md shrink-0 text-rose-500 hover:bg-rose-100 hover:text-rose-700" aria-label="Elimină școala" title="Elimină școala">
+          <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>
         </button>
       `;
-      tag.querySelector('button').addEventListener('click', () => tag.remove());
-      selectedWrap.appendChild(tag);
+      row.querySelector('button').addEventListener('click', () => row.remove());
+      selectedWrap.appendChild(row);
     }
 
-    function renderResults(list){
-      resultsWrap.innerHTML = '';
-      if(!list || !list.length){ hide(resultsWrap); return; }
-      show(resultsWrap);
-      list.forEach(item => {
-        const row = document.createElement('button');
-        row.type = 'button';
-        row.className = 'w-full text-left px-3 py-2 text-sm hover:bg-slate-50';
-        row.innerHTML = `<div class="font-medium">${escapeHtml(item.name)}</div>
-                        <div class="text-xs text-slate-500">${escapeHtml(item.city||'')}${item.city&&item.county?' / ':''}${escapeHtml(item.county||'')} • cod: ${escapeHtml(item.cod||'—')}</div>`;
-        row.addEventListener('click', () => { addSelectedSchool(item); hide(resultsWrap); });
-        resultsWrap.appendChild(row);
+    // ====== City searchable dropdown ======
+    let cityDdOpen = false;
+    let currentCities = []; // cities for current county
+
+    function resetCityDropdown(){
+      schoolCityHid.value = '';
+      cityDdLabel.textContent = '— Selectează județ —';
+      cityDdLabel.classList.add('text-slate-500');
+      cityDdLabel.classList.remove('text-slate-900');
+      currentCities = [];
+      cityDdList.innerHTML = '';
+      hide(cityDropdown);
+      cityDdOpen = false;
+    }
+
+    function selectCity(id, name){
+      schoolCityHid.value = id;
+      cityDdLabel.textContent = name || '— Toate orașele —';
+      cityDdLabel.classList.toggle('text-slate-500', !id);
+      cityDdLabel.classList.toggle('text-slate-900', !!id);
+      hide(cityDropdown);
+      cityDdOpen = false;
+      loadSchoolsForDropdown();
+    }
+
+    function renderCityList(filter){
+      cityDdList.innerHTML = '';
+      const norm = (s) => (s||'').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu,'');
+      const q = norm(filter);
+
+      // "All cities" option
+      const allBtn = document.createElement('button');
+      allBtn.type = 'button';
+      allBtn.className = 'w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 text-slate-500 border-b border-slate-100';
+      allBtn.textContent = '— Toate orașele —';
+      allBtn.addEventListener('click', () => selectCity('', ''));
+      cityDdList.appendChild(allBtn);
+
+      let count = 0;
+      currentCities.forEach(c => {
+        if (q && !norm(c.name).includes(q)) return;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50';
+        btn.textContent = c.name;
+        btn.addEventListener('click', () => selectCity(c.id, c.name));
+        cityDdList.appendChild(btn);
+        count++;
       });
+
+      if (!count) { cityDdEmpty.textContent = 'Niciun oraș găsit.'; show(cityDdEmpty); }
+      else { hide(cityDdEmpty); }
     }
 
-    function searchSchools(){
-      const q = searchInput.value.trim();
-      if(q.length < 2){ hide(resultsWrap); return; }
+    cityDdTrigger?.addEventListener('click', () => {
+      if (!currentCities.length) return;
+      cityDdOpen = !cityDdOpen;
+      cityDdOpen ? show(cityDropdown) : hide(cityDropdown);
+      if (cityDdOpen) { cityDdSearch.value = ''; cityDdSearch.focus(); renderCityList(''); }
+    });
+    cityDdSearch?.addEventListener('input', () => renderCityList(cityDdSearch.value));
+    cityDdSearch?.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hide(cityDropdown); cityDdOpen = false; } });
+    document.addEventListener('click', (e) => {
+      const wrap = $('#es-city-dd-wrap');
+      if (wrap && !wrap.contains(e.target)) { hide(cityDropdown); cityDdOpen = false; }
+    });
+
+    // County change → populate cities
+    schoolCountySel?.addEventListener('change', () => {
+      const countyId = parseInt(schoolCountySel.value) || 0;
+      if (!countyId) {
+        resetCityDropdown();
+      } else {
+        currentCities = allCitiesData.filter(c => c.county_id === countyId);
+        schoolCityHid.value = '';
+        cityDdLabel.textContent = '— Toate orașele —';
+        cityDdLabel.classList.add('text-slate-500');
+        cityDdLabel.classList.remove('text-slate-900');
+      }
+      loadSchoolsForDropdown();
+    });
+
+    // ====== School dropdown ======
+    let schoolDdOpen = false;
+    schoolDdTrigger?.addEventListener('click', () => {
+      schoolDdOpen = !schoolDdOpen;
+      schoolDdOpen ? show(schoolDropdown) : hide(schoolDropdown);
+      if (schoolDdOpen) { schoolDdSearch.value = ''; schoolDdSearch.focus(); loadSchoolsForDropdown(); }
+    });
+    document.addEventListener('click', (e) => {
+      const wrap = $('#es-school-dd-wrap');
+      if (wrap && !wrap.contains(e.target)) { hide(schoolDropdown); schoolDdOpen = false; }
+    });
+    schoolDdSearch?.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hide(schoolDropdown); schoolDdOpen = false; } });
+
+    // Search within dropdown
+    let schoolSearchTmr = null;
+    schoolDdSearch?.addEventListener('input', () => {
+      clearTimeout(schoolSearchTmr);
+      schoolSearchTmr = setTimeout(() => loadSchoolsForDropdown(), 250);
+    });
+
+    let schoolCache = [];
+    async function loadSchoolsForDropdown(){
+      const countyId = parseInt(schoolCountySel?.value) || 0;
+      const cityId   = parseInt(schoolCityHid?.value) || 0;
+      const q        = (schoolDdSearch?.value || '').trim();
+
+      if (!countyId && q.length < 2) {
+        schoolDdList.innerHTML = '';
+        schoolDdEmpty.textContent = 'Selectează un județ pentru a vedea școlile.';
+        show(schoolDdEmpty);
+        return;
+      }
+
       const fd = new FormData();
       fd.append('action', SEARCH_SCHOOL);
       fd.append('nonce', nonce);
       fd.append('q', q);
-      fd.append('term', q);
-      fd.append('search', q);
-      fd.append('s', q);
+      if (countyId) fd.append('county_id', countyId);
+      if (cityId)   fd.append('city_id', cityId);
 
-      fetch(ajaxUrl, { method:'POST', body: fd, credentials:'same-origin' })
-        .then(async r => {
-          const txt = await r.text();
-          let resp = {};
-          try { resp = JSON.parse(txt); } catch(e){ resp = {success:false, data:[]}; }
-          if (resp && Array.isArray(resp.data)) { renderResults(resp.data); }
-          else if (Array.isArray(resp)) { renderResults(resp); }
-          else if (resp && Array.isArray(resp.items)) { renderResults(resp.items); }
-          else { hide(resultsWrap); }
-        })
-        .catch(()=> hide(resultsWrap));
+      try {
+        const r = await fetch(ajaxUrl, { method:'POST', body:fd, credentials:'same-origin' });
+        const txt = await r.text();
+        let data = [];
+        try {
+          const resp = JSON.parse(txt);
+          data = Array.isArray(resp) ? resp : (Array.isArray(resp?.data) ? resp.data : []);
+        } catch(e){}
+
+        schoolCache = data;
+        renderSchoolDropdownList(data);
+      } catch(_){
+        schoolDdList.innerHTML = '';
+        schoolDdEmpty.textContent = 'Eroare la încărcarea școlilor.';
+        show(schoolDdEmpty);
+      }
     }
 
-    let tmr=null;
-    searchInput?.addEventListener('input', () => { clearTimeout(tmr); tmr = setTimeout(searchSchools, 250); });
-    $('#es-school-search-btn')?.addEventListener('click', searchSchools);
-    searchInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchSchools(); } });
-    document.addEventListener('click', (e)=>{ if(!resultsWrap.contains(e.target) && e.target!==resultsWrap && e.target!==searchInput){ hide(resultsWrap); } });
+    function renderSchoolDropdownList(list){
+      schoolDdList.innerHTML = '';
+      if (!list || !list.length) {
+        schoolDdEmpty.textContent = 'Niciun rezultat.';
+        show(schoolDdEmpty);
+        return;
+      }
+      hide(schoolDdEmpty);
+      list.forEach(item => {
+        // Skip already selected
+        if ($(`[data-school-id="${item.id}"]`, selectedWrap)) return;
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'w-full text-left px-3 py-2 text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0';
+        row.innerHTML = `<div class="font-medium">${escapeHtml(item.name)}</div>
+                        <div class="text-xs text-slate-500">${escapeHtml(item.city||'')}${item.city&&item.county?' / ':''}${escapeHtml(item.county||'')} • cod: ${escapeHtml(item.cod||'—')}</div>`;
+        row.addEventListener('click', () => {
+          addSelectedSchool(item);
+          row.remove();
+          // If no more items visible
+          if (!schoolDdList.children.length) {
+            schoolDdEmpty.textContent = 'Toate școlile au fost selectate.';
+            show(schoolDdEmpty);
+          }
+        });
+        schoolDdList.appendChild(row);
+      });
+    }
+
+    // ====== Email live validation ======
+    const emailInput = $('#es-prof-email');
+    const emailOk    = $('#es-email-ok');
+    const emailErr   = $('#es-email-err');
+    let emailCheckTmr = null;
+    let emailIsValid  = true; // tracks current state
+
+    function resetEmailValidation(){
+      hide(emailOk); hide(emailErr);
+      emailInput?.classList.remove('border-rose-400', 'border-emerald-400');
+      emailIsValid = true;
+    }
+
+    emailInput?.addEventListener('input', () => {
+      clearTimeout(emailCheckTmr);
+      resetEmailValidation();
+      const val = (emailInput.value || '').trim();
+      if (!val || val.length < 5 || !val.includes('@')) return;
+      emailCheckTmr = setTimeout(() => checkEmailExists(val), 400);
+    });
+
+    async function checkEmailExists(email){
+      // Skip validation when editing (user_id is set) and email hasn't changed
+      const editingId = userId.value || '';
+
+      const fd = new FormData();
+      fd.append('action', 'edu_check_email');
+      fd.append('nonce', nonce);
+      fd.append('email', email);
+      if (editingId) fd.append('user_id', editingId);
+
+      try {
+        const r = await fetch(ajaxUrl, { method:'POST', body:fd, credentials:'same-origin' });
+        const resp = await r.json();
+
+        // Only apply if the input still has the same value
+        if ((emailInput.value || '').trim() !== email) return;
+
+        if (resp && resp.success) {
+          // Email is available
+          show(emailOk); hide(emailErr);
+          emailInput.classList.remove('border-rose-400');
+          emailInput.classList.add('border-emerald-400');
+          emailIsValid = true;
+        } else {
+          // Email exists
+          const msg = resp?.data?.message || 'Acest email există deja în sistem.';
+          emailErr.textContent = msg;
+          show(emailErr); hide(emailOk);
+          emailInput.classList.remove('border-emerald-400');
+          emailInput.classList.add('border-rose-400');
+          emailIsValid = false;
+        }
+      } catch(_){
+        // Network error, don't block
+        resetEmailValidation();
+      }
+    }
 
     // ====== Submit Add/Edit (SAVE_ACTION) ======
     form?.addEventListener('submit', function(e){
       e.preventDefault();
+      if (!emailIsValid) {
+        toast('Emailul este deja folosit. Corectează adresa.', 'err');
+        emailInput?.focus();
+        return;
+      }
       if(isTutorOnly && !this.querySelector('input[name="assigned_tutor_id"]')) {
         const h = document.createElement('input');
         h.type='hidden'; h.name='assigned_tutor_id'; h.value = String(myTutorId);
@@ -1747,10 +2150,34 @@ $COLS = [
       return (m >= 8) ? `${y}-${y+1}` : `${y-1}-${y}`;
     }
 
+    function getAcademicYearOptions(){
+      const d = new Date();
+      const y = d.getFullYear(), m = d.getMonth() + 1;
+      const baseYear = (m >= 8) ? y : y - 1;
+      return [
+        `${baseYear}-${baseYear+1}`,
+        `${baseYear+1}-${baseYear+2}`,
+        `${baseYear+2}-${baseYear+3}`,
+      ];
+    }
+
+    function populateYearDropdown(selectedValue){
+      if (!genYearDisp) return;
+      const opts = getAcademicYearOptions();
+      const sel = selectedValue || opts[0];
+      genYearDisp.innerHTML = opts.map(o =>
+        `<option value="${o}" ${o === sel ? 'selected' : ''}>${o}</option>`
+      ).join('');
+      if (genYearHid) genYearHid.value = genYearDisp.value;
+    }
+
+    // Sync hidden field when dropdown changes
+    genYearDisp?.addEventListener('change', () => {
+      if (genYearHid) genYearHid.value = genYearDisp.value;
+    });
+
     function setYearAuto(){
-      const y = computeAcademicYearStr();
-      if (genYearDisp) genYearDisp.value = y;
-      if (genYearHid)  genYearHid.value  = y;
+      populateYearDropdown();
     }
 
     function renderLevelAndClasses(code){
@@ -1780,8 +2207,7 @@ $COLS = [
           renderLevelAndClasses(data.data.level_code || '');
           // preferăm anul de pe server, dacă vine
           const sy = (data.data.year || computeAcademicYearStr());
-          if (genYearDisp) genYearDisp.value = sy;
-          if (genYearHid)  genYearHid.value  = sy;
+          populateYearDropdown(sy);
         } else {
           renderLevelAndClasses('');
         }
@@ -1832,8 +2258,8 @@ $COLS = [
         setYearAuto();
         fetchProfessorLevel(pid);
         lockProfessorUI(true, pname
-          ? `<span class="px-2 py-1 rounded bg-indigo-50 text-indigo-800 ring-1 ring-indigo-200">Profesor: ${escapeHtml(pname)} (#${pid})</span>`
-          : `<span class="px-2 py-1 rounded bg-indigo-50 text-indigo-800 ring-1 ring-indigo-200">Profesor selectat: #${pid}</span>`
+          ? `<span class="px-2 py-1 text-indigo-800 rounded bg-indigo-50 ring-1 ring-indigo-200">Profesor: ${escapeHtml(pname)} (#${pid})</span>`
+          : `<span class="px-2 py-1 text-indigo-800 rounded bg-indigo-50 ring-1 ring-indigo-200">Profesor selectat: #${pid}</span>`
         );
         genTitleEl.textContent = 'Alocă generație';
         genModal.classList.remove('hidden');
@@ -1877,7 +2303,7 @@ $COLS = [
           b.addEventListener('click', ()=>{
             const pid = b.getAttribute('data-id') || '';
             genProfId.value = pid;
-            genProfSelected.innerHTML = `<span class="px-2 py-1 rounded bg-indigo-50 text-indigo-800 ring-1 ring-indigo-200">Profesor selectat: ${escapeHtml(b.textContent)} (#${pid})</span>`;
+            genProfSelected.innerHTML = `<span class="px-2 py-1 text-indigo-800 rounded bg-indigo-50 ring-1 ring-indigo-200">Profesor selectat: ${escapeHtml(b.textContent)} (#${pid})</span>`;
             genProfSuggest.classList.add('hidden'); genProfSuggest.innerHTML='';
             fetchProfessorLevel(pid);
           });

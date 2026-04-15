@@ -117,27 +117,15 @@ foreach ($cards as $c) {
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center min-w-0 gap-x-4">
           <div class="flex flex-wrap items-center gap-2">
-            <a href="'.esc_url($gen_url).'" class="flex items-center text-base font-semibold tracking-tight gap-x-2 text-slate-900 hover:text-blue-600">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-4">
-              <path fill-rule="evenodd" d="M19.902 4.098a3.75 3.75 0 0 0-5.304 0l-4.5 4.5a3.75 3.75 0 0 0 1.035 6.037.75.75 0 0 1-.646 1.353 5.25 5.25 0 0 1-1.449-8.45l4.5-4.5a5.25 5.25 0 1 1 7.424 7.424l-1.757 1.757a.75.75 0 1 1-1.06-1.06l1.757-1.757a3.75 3.75 0 0 0 0-5.304Zm-7.389 4.267a.75.75 0 0 1 1-.353 5.25 5.25 0 0 1 1.449 8.45l-4.5 4.5a5.25 5.25 0 1 1-7.424-7.424l1.757-1.757a.75.75 0 1 1 1.06 1.06l-1.757 1.757a3.75 3.75 0 1 0 5.304 5.304l4.5-4.5a3.75 3.75 0 0 0-1.035-6.037.75.75 0 0 1-.354-1Z" clip-rule="evenodd" />
-            </svg>
-
-            '.esc_html($c['gname']).'
-            </a>
-            <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-slate-700 ring-1 ring-inset ring-slate-200">'.esc_html($c['gyear']).'</span>
+            <a href="'.esc_url($prof_url).'" class="font-medium text-slate-800 hover:text-blue-600">'.esc_html($c['prof_name']).'</a>
+            
+            <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-slate-700 ring-1 ring-inset ring-slate-200">'.esc_html($c['gyear']).'- Ciclul <b>'.esc_html($c['prof_level']).'</b> - <b>'.(int)$c['students_count'].' elevi</b></span>
           </div>
           <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-600">
             <span class="inline-flex items-center gap-1.5 gap-x-2">
-              <svg class="size-4 text-slate-600" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-5.33 0-8 2.667-8 6a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1c0-3.333-2.67-6-8-6Z"/></svg>
-              <a href="'.esc_url($prof_url).'" class="font-medium text-slate-800 hover:text-blue-600">'.esc_html($c['prof_name']).'</a>
-            </span>
-            <span class="inline-flex items-center gap-1.5">
-              <svg class="size-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-              Ciclul <b>'.esc_html($c['prof_level']).'</b>
-            </span>
-            <span class="inline-flex items-center gap-1.5">
-              <svg class="size-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-              Elevi <b>'.(int)$c['students_count'].'</b>
+              <a href="'.esc_url($gen_url).'" class="flex items-center text-base font-semibold tracking-tight gap-x-2 text-slate-900 hover:text-blue-600">
+                '.esc_html($c['gname']).'
+              </a>
             </span>
           </div>
         </div>

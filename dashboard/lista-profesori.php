@@ -77,7 +77,7 @@ function es_format_dt($ts_or_str){
 /* =============== Filtre (UI & logic) =============== */
 
 $s          = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
-$nivel      = isset($_GET['nivel']) ? sanitize_text_field(wp_unslash($_GET['nivel'])) : '';
+$nivel_arr  = isset($_GET['nivel']) ? array_filter(array_map('sanitize_text_field', (array)$_GET['nivel'])) : [];
 $statut     = isset($_GET['statut']) ? sanitize_text_field(wp_unslash($_GET['statut'])) : '';
 $gen_year   = isset($_GET['gen_year']) ? sanitize_text_field(wp_unslash($_GET['gen_year'])) : '';
 $county_f   = isset($_GET['county']) ? sanitize_text_field(wp_unslash($_GET['county'])) : '';
@@ -252,26 +252,26 @@ sort($rsoi_list, SORT_NATURAL);
 
 $filtered = $all_prof;
 
-// Filtru: Nivel predare (normalizat)
-if ($nivel !== '') {
-  $nivel_code = es_normalize_level_code($nivel);
-  $by_level = [];
-  foreach ($filtered as $u) {
-    $raw = get_user_meta((int)$u->ID, 'nivel_predare', true);
-
-    // poate fi string sau array (ACF)
-    $match = false;
-    if (is_array($raw)) {
-      foreach ($raw as $rv) {
-        if (es_normalize_level_code($rv) === $nivel_code) { $match = true; break; }
+// Filtru: Nivel predare (normalizat, multiselect)
+if (!empty($nivel_arr)) {
+  $nivel_codes = array_map('es_normalize_level_code', $nivel_arr);
+  $nivel_codes = array_filter($nivel_codes);
+  if (!empty($nivel_codes)) {
+    $by_level = [];
+    foreach ($filtered as $u) {
+      $raw = get_user_meta((int)$u->ID, 'nivel_predare', true);
+      $match = false;
+      if (is_array($raw)) {
+        foreach ($raw as $rv) {
+          if (in_array(es_normalize_level_code($rv), $nivel_codes, true)) { $match = true; break; }
+        }
+      } else {
+        if (in_array(es_normalize_level_code($raw), $nivel_codes, true)) $match = true;
       }
-    } else {
-      if (es_normalize_level_code($raw) === $nivel_code) $match = true;
+      if ($match) $by_level[] = $u;
     }
-
-    if ($match) $by_level[] = $u;
+    $filtered = $by_level;
   }
-  $filtered = $by_level;
 }
 
 // Filtru: An generație
@@ -389,12 +389,29 @@ if ($export_csv) {
 $qs = $_GET; unset($qs['paged'], $qs['export']);
 $base_url = esc_url(add_query_arg($qs, remove_query_arg(['paged','export'])));
 
+// Column definitions for toggle
+$COLS = [
+  'cod'         => 'Cod SLF',
+  'statut'      => 'Statut',
+  'nivel'       => 'Nivel',
+  'anprog'      => 'An program',
+  'rsoi'        => 'RSOI',
+  'teach'       => 'Teach',
+  'materie'     => 'Materie',
+  'generatii'   => 'Generații',
+  'elevi'       => 'Elevi',
+  'scoli'       => 'Școli',
+  'judet'       => 'Județ',
+  'last'        => 'Ultima activitate',
+  'reg'         => 'Înregistrare',
+];
+
 $export_url = add_query_arg([
   'action' => 'edus_export_teachers_csv',
   'nonce'  => wp_create_nonce('edus_export_teachers_csv'),
   // păstrăm filtrele active (exemplu; ajustează în handler dacă folosești alți parametri)
   's'          => $s,
-  'nivel'      => $nivel,
+  'nivel'      => $nivel_arr,
   'statut'     => $statut,
   'gen_year'   => $gen_year,
   'county'     => $county_f,
@@ -427,8 +444,23 @@ $export_url = add_query_arg([
   </div>
 </section>
 
+<!-- Toggle coloane -->
+<section id="cols-section" class="hidden px-6 mb-4 -mt-2">
+  <div class="p-3 bg-white border shadow-sm rounded-xl border-slate-200">
+    <div class="mb-2 text-xs font-medium text-slate-600">Afișează/ascunde coloane</div>
+    <div class="flex flex-wrap gap-3 text-sm" id="cols-toggle">
+      <?php foreach ($COLS as $k=>$label): ?>
+        <label class="inline-flex items-center gap-2 select-none">
+          <input type="checkbox" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" data-col="<?php echo esc_attr($k); ?>" checked>
+          <span class="text-slate-700"><?php echo esc_html($label); ?></span>
+        </label>
+      <?php endforeach; ?>
+    </div>
+  </div>
+</section>
+
 <section class="px-6 mt-4 mb-6">
-  <form method="get" class="grid items-end grid-cols-1 gap-3 md:grid-cols-12">
+  <form method="get" action="<?php echo esc_url(home_url('/profesori/')); ?>" class="grid items-end grid-cols-1 gap-3 md:grid-cols-12">
     <!-- Căutare -->
     <div class="relative md:col-span-3">
       <label class="block mb-1 text-xs font-medium text-slate-600">Căutare (nume/email)</label>
@@ -448,15 +480,47 @@ $export_url = add_query_arg([
           class="absolute z-20 hidden w-full mt-1 overflow-auto bg-white border rounded-lg shadow-lg max-h-72 border-slate-200"></div>
     </div>
 
-    <!-- Nivel -->
-    <div class="md:col-span-1">
+    <!-- Nivel (multiselect custom dropdown) -->
+    <div class="md:col-span-2 relative" id="nivel-ms-wrap">
       <label class="block mb-1 text-xs font-medium text-slate-600">Nivel predare</label>
-      <select name="nivel" class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
-        <option value="" class="text-xs">— Oricare —</option>
-        <?php foreach (['prescolar'=>'Preșcolar','primar'=>'Primar','gimnazial'=>'Gimnazial','liceu'=>'Liceu'] as $k=>$lab): ?>
-          <option value="<?php echo esc_attr($k); ?>" <?php selected($nivel===$k); ?>><?php echo esc_html($lab); ?></option>
+      <?php
+        $nivel_options = ['prescolar'=>'Preșcolar','primar'=>'Primar','gimnazial'=>'Gimnazial','liceu'=>'Liceu'];
+      ?>
+      <!-- Hidden inputs for form submission -->
+      <div id="nivel-ms-inputs">
+        <?php foreach ($nivel_arr as $v): ?>
+          <input type="hidden" name="nivel[]" value="<?php echo esc_attr($v); ?>">
         <?php endforeach; ?>
-      </select>
+      </div>
+      <!-- Trigger -->
+      <div id="nivel-ms-trigger" class="flex items-center gap-1 w-full min-h-[38px] px-3 py-1.5 text-sm bg-white border shadow-sm rounded-xl border-slate-300 cursor-pointer hover:border-slate-400 flex-wrap">
+        <?php if (empty($nivel_arr)): ?>
+          <span class="nivel-ms-placeholder text-slate-400">— Oricare —</span>
+        <?php else: ?>
+          <?php foreach ($nivel_arr as $v):
+            $lab = $nivel_options[$v] ?? $v;
+          ?>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-200 nivel-ms-tag" data-val="<?php echo esc_attr($v); ?>">
+              <?php echo esc_html($lab); ?>
+              <button type="button" class="nivel-ms-remove hover:text-red-600">&times;</button>
+            </span>
+          <?php endforeach; ?>
+        <?php endif; ?>
+        <svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </div>
+      <!-- Dropdown -->
+      <div id="nivel-ms-dropdown" class="hidden absolute z-30 w-full mt-1 bg-white border shadow-lg rounded-xl border-slate-200 py-1">
+        <?php foreach ($nivel_options as $k=>$lab): ?>
+          <div class="nivel-ms-opt flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-slate-50" data-val="<?php echo esc_attr($k); ?>">
+            <span class="inline-flex items-center justify-center w-4 h-4 rounded border border-slate-300 nivel-ms-check <?php echo in_array($k, $nivel_arr, true) ? 'bg-sky-600 border-sky-600' : 'bg-white'; ?>">
+              <?php if (in_array($k, $nivel_arr, true)): ?>
+                <svg class="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <?php endif; ?>
+            </span>
+            <span><?php echo esc_html($lab); ?></span>
+          </div>
+        <?php endforeach; ?>
+      </div>
     </div>
 
     <!-- Statut -->
@@ -464,7 +528,7 @@ $export_url = add_query_arg([
       <label class="block mb-1 text-xs font-medium text-slate-600">Statut</label>
       <select name="statut" class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
         <option value="" class="text-xs">— Oricare —</option>
-        <?php foreach (['in_asteptare'=>'În așteptare','aprobat'=>'Aprobat','respins'=>'Respins'] as $k=>$lab): ?>
+        <?php foreach (['activ'=>'Activ','in_asteptare'=>'În așteptare','aprobat'=>'Aprobat','respins'=>'Respins'] as $k=>$lab): ?>
           <option value="<?php echo esc_attr($k); ?>" <?php selected($statut===$k); ?>><?php echo esc_html($lab); ?></option>
         <?php endforeach; ?>
       </select>
@@ -531,19 +595,19 @@ $export_url = add_query_arg([
       <thead class="sticky top-0 bg-sky-800 backdrop-blur">
         <tr class="text-white">
           <th class="px-3 py-3 font-semibold text-left border-b border-slate-200">Profesor</th>
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200">Cod SLF</th>
-          <th class="px-3 py-3 font-semibold text-center border-b border-slate-200">Statut</th>
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200">Nivel</th>
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200">An program</th>   <!-- nou -->
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200">RSOI</th>        <!-- nou -->
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200">Teach</th>       <!-- nou -->
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200">Materie</th>
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200">Generații</th>
-          <th class="px-3 py-3 font-semibold text-center border-b border-slate-200">Elevi</th>
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200">Școli</th>
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200">Județ</th>
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200">Ultima activitate</th> <!-- last_login -->
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200">Înregistrare</th>      <!-- user_registered -->
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="cod">Cod SLF</th>
+          <th class="px-3 py-3 font-semibold text-center border-b border-slate-200" data-col="statut">Statut</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="nivel">Nivel</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="anprog">An program</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="rsoi">RSOI</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="teach">Teach</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="materie">Materie</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="generatii">Generații</th>
+          <th class="px-3 py-3 font-semibold text-center border-b border-slate-200" data-col="elevi">Elevi</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="scoli">Școli</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="judet">Județ</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="last">Ultima activitate</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="reg">Înregistrare</th>
           <th class="px-3 py-3 font-semibold text-center border-b border-slate-200">Acțiuni</th>
         </tr>
       </thead>
@@ -634,28 +698,28 @@ $export_url = add_query_arg([
               </td>
 
               <!-- Cod SLF -->
-              <td class="px-3 py-3 align-center text-slate-800"><?php echo $cod!=='' ? esc_html($cod) : '—'; ?></td>
+              <td class="px-3 py-3 align-center text-slate-800" data-col="cod"><?php echo $cod!=='' ? esc_html($cod) : '—'; ?></td>
 
               <!-- Statut -->
-              <td class="px-3 py-3 text-center align-center"><?php echo es_statut_badge($stat); ?></td>
+              <td class="px-3 py-3 text-center align-center" data-col="statut"><?php echo es_statut_badge($stat); ?></td>
 
               <!-- Nivel -->
-              <td class="px-3 py-3 align-center text-slate-800"><?php echo esc_html(es_level_label($nivel_val)); ?></td>
+              <td class="px-3 py-3 align-center text-slate-800" data-col="nivel"><?php echo esc_html(es_level_label($nivel_val)); ?></td>
 
-              <!-- An program (nou) -->
-              <td class="px-3 py-3 align-center text-slate-800"><?php echo $an_prog!=='' ? esc_html($an_prog) : '—'; ?></td>
+              <!-- An program -->
+              <td class="px-3 py-3 align-center text-slate-800" data-col="anprog"><?php echo $an_prog!=='' ? esc_html($an_prog) : '—'; ?></td>
 
-              <!-- RSOI (nou) -->
-              <td class="px-3 py-3 align-center text-slate-800"><?php echo $rsoi_v!=='' ? esc_html($rsoi_v) : '—'; ?></td>
+              <!-- RSOI -->
+              <td class="px-3 py-3 align-center text-slate-800" data-col="rsoi"><?php echo $rsoi_v!=='' ? esc_html($rsoi_v) : '—'; ?></td>
 
-              <!-- Teach (nou) -->
-              <td class="px-3 py-3 align-center text-slate-800"><?php echo $teach_v!=='' ? esc_html($teach_v) : '—'; ?></td>
+              <!-- Teach -->
+              <td class="px-3 py-3 align-center text-slate-800" data-col="teach"><?php echo $teach_v!=='' ? esc_html($teach_v) : '—'; ?></td>
 
               <!-- Materie -->
-              <td class="px-3 py-3 align-center text-slate-800"><?php echo $mat!=='' ? esc_html($mat) : '—'; ?></td>
+              <td class="px-3 py-3 align-center text-slate-800" data-col="materie"><?php echo $mat!=='' ? esc_html($mat) : '—'; ?></td>
 
               <!-- Generații -->
-              <td class="px-3 py-3 align-center">
+              <td class="px-3 py-3 align-center" data-col="generatii">
                 <?php if ($gens): ?>
                   <div class="flex flex-wrap gap-2">
                     <?php foreach ($gens as $g): ?>
@@ -675,10 +739,10 @@ $export_url = add_query_arg([
               </td>
 
               <!-- Elevi -->
-              <td class="px-3 py-3 text-center align-center text-slate-900"><?php echo (int)$elevi; ?></td>
+              <td class="px-3 py-3 text-center align-center text-slate-900" data-col="elevi"><?php echo (int)$elevi; ?></td>
 
               <!-- Școli -->
-              <td class="px-3 py-3 align-center text-slate-800">
+              <td class="px-3 py-3 align-center text-slate-800" data-col="scoli">
                 <?php if ($school_count): ?>
                   <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-sky-50 text-sky-800 ring-1 ring-sky-200" title="<?php echo $school_title; ?>">
                     <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 1.5 9 12 15 22.5 9 12 3Z"/><path d="M3 10.5v5.25L12 21l9-5.25V10.5" opacity=".4"/></svg>
@@ -690,20 +754,20 @@ $export_url = add_query_arg([
               </td>
 
               <!-- Județ -->
-              <td class="px-3 py-3 align-center text-slate-800" title="<?php echo $cty_title; ?>">
+              <td class="px-3 py-3 align-center text-slate-800" data-col="judet" title="<?php echo $cty_title; ?>">
                 <?php echo esc_html($cty_main); ?>
                 <?php if ($ctys && count($ctys)>1): ?>
                   <span class="text-xs text-slate-500">(+<?php echo count($ctys)-1; ?>)</span>
                 <?php endif; ?>
               </td>
 
-              <!-- Ultima activitate (last_login/last_activity/last_seen) -->
-              <td class="px-3 py-3 text-xs max-w-[80px] align-center text-slate-700">
+              <!-- Ultima activitate -->
+              <td class="px-3 py-3 text-xs max-w-[80px] align-center text-slate-700" data-col="last">
                 <?php echo esc_html(es_format_dt($last_login_ts)); ?>
               </td>
 
-              <!-- Înregistrare (user_registered) -->
-              <td class="px-3 py-3 text-xs max-w-[80px] align-center text-slate-700">
+              <!-- Înregistrare -->
+              <td class="px-3 py-3 text-xs max-w-[80px] align-center text-slate-700" data-col="reg">
                 <?php echo esc_html(es_format_dt($registered_ts)); ?>
               </td>
 
@@ -855,5 +919,124 @@ $export_url = add_query_arg([
 
   // rulează o dată la încărcare (dacă aveai s din GET)
   filterRows();
+})();
+
+// — Nivel multiselect dropdown
+(function(){
+  const wrap     = document.getElementById('nivel-ms-wrap');
+  const trigger  = document.getElementById('nivel-ms-trigger');
+  const dropdown = document.getElementById('nivel-ms-dropdown');
+  const inputs   = document.getElementById('nivel-ms-inputs');
+  if (!wrap || !trigger || !dropdown || !inputs) return;
+
+  const OPTIONS = <?php echo wp_json_encode($nivel_options); ?>;
+  let selected = <?php echo wp_json_encode(array_values($nivel_arr)); ?>;
+
+  function render(){
+    // Hidden inputs
+    inputs.innerHTML = selected.map(v => `<input type="hidden" name="nivel[]" value="${v}">`).join('');
+
+    // Tags in trigger
+    const tags = selected.map(v => {
+      const lab = OPTIONS[v] || v;
+      return `<span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-200 nivel-ms-tag" data-val="${v}">
+        ${lab}<button type="button" class="nivel-ms-remove hover:text-red-600">&times;</button>
+      </span>`;
+    }).join('');
+    const arrow = '<svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>';
+    trigger.innerHTML = selected.length
+      ? tags + arrow
+      : '<span class="nivel-ms-placeholder text-slate-400">— Oricare —</span>' + arrow;
+
+    // Checkboxes in dropdown
+    dropdown.querySelectorAll('.nivel-ms-opt').forEach(opt => {
+      const v = opt.dataset.val;
+      const isOn = selected.includes(v);
+      const box = opt.querySelector('.nivel-ms-check');
+      if (isOn) {
+        box.className = 'inline-flex items-center justify-center w-4 h-4 rounded border border-sky-600 bg-sky-600 nivel-ms-check';
+        box.innerHTML = '<svg class="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>';
+      } else {
+        box.className = 'inline-flex items-center justify-center w-4 h-4 rounded border border-slate-300 bg-white nivel-ms-check';
+        box.innerHTML = '';
+      }
+    });
+  }
+
+  // Toggle dropdown
+  trigger.addEventListener('click', (e) => {
+    if (e.target.closest('.nivel-ms-remove')) return;
+    dropdown.classList.toggle('hidden');
+  });
+
+  // Remove tag
+  trigger.addEventListener('click', (e) => {
+    const btn = e.target.closest('.nivel-ms-remove');
+    if (!btn) return;
+    const tag = btn.closest('.nivel-ms-tag');
+    const val = tag?.dataset.val;
+    if (val) {
+      selected = selected.filter(v => v !== val);
+      render();
+    }
+  });
+
+  // Toggle option in dropdown
+  dropdown.addEventListener('click', (e) => {
+    const opt = e.target.closest('.nivel-ms-opt');
+    if (!opt) return;
+    const val = opt.dataset.val;
+    if (selected.includes(val)) {
+      selected = selected.filter(v => v !== val);
+    } else {
+      selected.push(val);
+    }
+    render();
+  });
+
+  // Close on outside click
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#nivel-ms-wrap')) dropdown.classList.add('hidden');
+  });
+})();
+
+// — Column toggle (persistă în localStorage)
+(function(){
+  const toggleBtnBar = document.getElementById('cols-toggle-btn');
+  if(!toggleBtnBar) return;
+  const toggleBar = document.getElementById('cols-section');
+  if(!toggleBar) return;
+  const KEY = 'lista_prof_cols_v1';
+  const toggles = document.querySelectorAll('#cols-toggle input[type="checkbox"][data-col]');
+  const table   = document.getElementById('prof-table');
+  if(!table) return;
+
+  toggleBtnBar.addEventListener('click', () => {
+    toggleBar.classList.toggle('hidden');
+  });
+
+  const apply = (state) => {
+    toggles.forEach(cb => {
+      const k = cb.getAttribute('data-col');
+      const on = state[k] !== false;
+      cb.checked = on;
+      table.querySelectorAll('th[data-col="'+k+'"], td[data-col="'+k+'"]').forEach(el => {
+        el.style.display = on ? '' : 'none';
+      });
+    });
+  };
+
+  let state = {};
+  try { state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch(e){ state = {}; }
+  apply(state);
+
+  toggles.forEach(cb => {
+    cb.addEventListener('change', () => {
+      const k = cb.getAttribute('data-col');
+      state[k] = cb.checked;
+      localStorage.setItem(KEY, JSON.stringify(state));
+      apply(state);
+    });
+  });
 })();
 </script>

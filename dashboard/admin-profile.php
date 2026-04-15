@@ -173,9 +173,9 @@ get_header('blank');
   </div>
 <?php endif; ?>
 
-<section class="w-full px-6 pb-8 mt-6 mb-8 relative">
+<section class="relative w-full px-6 pb-8 mt-6 mb-8">
   <!-- Luxury glow -->
-  <div aria-hidden="true" class="pointer-events-none absolute inset-x-0 -top-16 h-56 bg-gradient-to-r from-amber-200/50 via-orange-200/50 to-rose-200/50 blur-2xl"></div>
+  <div aria-hidden="true" class="absolute inset-x-0 h-56 pointer-events-none -top-16 bg-gradient-to-r from-amber-200/50 via-orange-200/50 to-rose-200/50 blur-2xl"></div>
 
   <div class="relative overflow-hidden shadow-sm bg-gradient-to-r from-emerald-600 to-emerald-800 rounded-2xl">
     <div class="relative p-4">
@@ -185,7 +185,7 @@ get_header('blank');
             <?php if ($profile_image_id): ?>
               <img src="<?= esc_url(wp_get_attachment_image_url($profile_image_id, 'medium')); ?>" class="object-cover size-24" alt="Profil">
             <?php else: ?>
-              <img src="<?= esc_url(get_template_directory_uri().'/assets/images/default-profile.png'); ?>" class="object-cover size-24" alt="Profil">
+              <img src="<?= esc_url(get_template_directory_uri().'/assets/images/default-teach.svg'); ?>" class="object-cover size-24" alt="Profil">
             <?php endif; ?>
           </div>
         </div>
@@ -215,7 +215,7 @@ get_header('blank');
         </div>
 
         <!-- Quick Stats small -->
-        <div class="grid grid-cols-2 overflow-hidden rounded-xl bg-white text-slate-900 ring-1 ring-slate-200">
+        <div class="grid grid-cols-2 overflow-hidden bg-white rounded-xl text-slate-900 ring-1 ring-slate-200">
           <div class="px-4 py-3 text-center">
             <div class="text-xs text-slate-500">Utilizatori</div>
             <div class="text-sm font-semibold"><?= edus_num($total_users); ?></div>
@@ -228,7 +228,7 @@ get_header('blank');
       </div>
 
       <!-- Action bar -->
-      <div class="mt-5 flex flex-wrap items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2 mt-5">
         <a href="<?= esc_url( home_url('/panou/profesori') ); ?>" class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white shadow-sm rounded-xl bg-slate-900 hover:bg-black">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h18v2H3zM3 9h18v2H3zM3 14h18v2H3zM3 19h18v2H3z"/></svg>
           Lista profesori

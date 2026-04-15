@@ -38,7 +38,7 @@ $all_menu = [
 if ( current_user_can('manage_options') ) {
   $visible_keys = ['dashboard','elevi','generatii','profesori','scoli','rapoarte','utilizatori','profil','notificari','setari','optiuni'];
 } elseif ( in_array('tutor', $user_roles, true) ) {
-  $visible_keys = ['dashboard','generatii','profesori','profil','setari'];
+  $visible_keys = ['dashboard','generatii','profesori','rapoarte','setari'];
 } elseif ( in_array('profesor', $user_roles, true) ) {
   $visible_keys = ['dashboard','lista','evaluari','profil','setari'];
 } else {
@@ -111,7 +111,7 @@ foreach ($visible_keys as $k) {
           <img src="<?= esc_url(wp_get_attachment_image_url($profile_image, 'thumbnail')); ?>"
                alt="Profil" class="object-cover w-10 h-10 rounded-full">
         <?php else: ?>
-          <img src="<?= esc_url(get_template_directory_uri().'/assets/images/default-profile.png'); ?>"
+          <img src="<?= esc_url(get_template_directory_uri().'/assets/images/default-teach.svg'); ?>"
                alt="Profil" class="object-cover w-10 h-10 rounded-full">
         <?php endif; ?>
       </div>

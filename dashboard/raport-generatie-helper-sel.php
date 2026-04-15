@@ -253,6 +253,11 @@ $SEL_overall_allStages_avg = edus_array_avg_non_null($SEL_avg_allStages_chapters
 // completare medie pe toate etapele (dacă vrei s-o afișezi în rezumat)
 $SEL_completion_allStages = edus_completion_avg($rows_all);
 
+// completare medie per etapă
+$sel_completion_t0 = edus_completion_avg(array_values($rows_t0));
+$sel_completion_ti = edus_completion_avg(array_values($rows_ti));
+$sel_completion_t1 = edus_completion_avg(array_values($rows_t1));
+
 // aliasuri pentru UI (ca să fie clar ce folosim unde)
 $sel_gen_chapter_avg_allStages = $SEL_avg_allStages_chapters;
 $sel_overall_allStages_avg     = $SEL_overall_allStages_avg;

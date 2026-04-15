@@ -88,20 +88,21 @@ $session_tokens      = get_user_meta($view_user_id, 'session_tokens', true);
 $user_status_profesor= get_user_meta($view_user_id, 'user_status_profesor', true);
 $user_phone= get_user_meta($view_user_id, 'phone', true);
 
-$associated_schools  = get_field('scoli_asociate', 'user_'.$view_user_id);
-$generation          = get_field('generatie', 'user_'.$view_user_id);
-$program_year        = get_field('an_program', 'user_'.$view_user_id);
-$status              = get_field('statut', 'user_'.$view_user_id);
-$statut              = get_field('statut_prof', 'user_'.$view_user_id);
-$materie             = get_field('materia_predata', 'user_'.$view_user_id);
-$qualification       = get_field('calificare', 'user_'.$view_user_id);
-$experience          = get_field('experienta', 'user_'.$view_user_id);
-$teaching_level      = get_field('nivel_predare', 'user_'.$view_user_id);
-$mentor_sel          = get_field('mentor_sel', 'user_'.$view_user_id);
-$mentor_lit          = get_field('mentor_literatie', 'user_'.$view_user_id);
-$mentor_num          = get_field('mentor_numeratie', 'user_'.$view_user_id);
-$segment_rsoi        = get_field('segment_rsoi', 'user_'.$view_user_id);
-$cod_slf             = get_field('cod_slf', 'user_'.$view_user_id);
+$generation          = get_user_meta($view_user_id, 'generatie', true);
+$program_year        = get_user_meta($view_user_id, 'an_program', true);
+$status              = get_user_meta($view_user_id, 'statut', true);
+$statut              = get_user_meta($view_user_id, 'statut_prof', true);
+$materie             = get_user_meta($view_user_id, 'materia_predata', true);
+$qualification       = get_user_meta($view_user_id, 'calificare', true);
+$experience          = get_user_meta($view_user_id, 'experienta', true);
+$teaching_level      = get_user_meta($view_user_id, 'nivel_predare', true);
+if (is_array($teaching_level)) $teaching_level = $teaching_level[0] ?? '';
+$mentor_sel          = get_user_meta($view_user_id, 'mentor_sel', true);
+$mentor_lit          = get_user_meta($view_user_id, 'mentor_literatie', true);
+$mentor_num          = get_user_meta($view_user_id, 'mentor_numeratie', true);
+$segment_rsoi        = get_user_meta($view_user_id, 'segment_rsoi', true);
+$cod_slf             = get_user_meta($view_user_id, 'cod_slf', true);
+$cohorte             = get_user_meta($view_user_id, 'cohorte', true);
 
 $member_since  = $view_user->user_registered ? date_i18n( get_option('date_format'), strtotime($view_user->user_registered) ) : '';
 $badge = [
@@ -138,7 +139,7 @@ get_header('blank');
             <?php if ($profile_image_id): ?>
               <img src="<?= esc_url(wp_get_attachment_image_url($profile_image_id, 'medium')); ?>" class="object-cover size-24" alt="Profil">
             <?php else: ?>
-              <img src="<?= esc_url(get_template_directory_uri().'/assets/images/default-profile.png'); ?>" class="object-cover size-24" alt="Profil">
+              <img src="<?= esc_url(get_template_directory_uri().'/assets/images/default-teach.svg'); ?>" class="object-cover size-24" alt="Profil">
             <?php endif; ?>
           </div>
         </div>
@@ -203,6 +204,37 @@ get_header('blank');
 
 <!-- ===== Conținut: 3 coloane (identic cu varianta ta, doar referințe la $view_user_id) ===== -->
 <section class="grid w-full gap-6 px-6 pb-8 lg:grid-cols-3">
+
+  <div class="p-5 bg-white border shadow-sm rounded-2xl border-slate-200">
+    <h2 class="mb-4 text-sm font-semibold tracking-wide uppercase text-slate-800">Date educaționale & administrative</h2>
+    <dl class="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+      <div class="flex justify-between gap-3"><dt class="text-slate-500">Generație</dt><dd class="font-medium text-slate-800"><?= esc_html($generation ?: '—'); ?></dd></div>
+      <div class="flex justify-between gap-3"><dt class="text-slate-500">An program</dt><dd class="font-medium text-slate-800"><?= esc_html($program_year ?: '—'); ?></dd></div>
+      <div class="flex justify-between gap-3"><dt class="text-slate-500">Statut</dt><dd class="font-medium text-slate-800"><?= esc_html($statut ?: ($status ?: '—')); ?></dd></div>
+      <div class="flex justify-between gap-3"><dt class="text-slate-500">Calificare</dt><dd class="font-medium text-slate-800"><?= esc_html($qualification ?: '—'); ?></dd></div>
+      <div class="flex justify-between gap-3"><dt class="text-slate-500">Experiență</dt><dd class="font-medium text-slate-800"><?= esc_html($experience ?: '—'); ?></dd></div>
+      <div class="flex justify-between gap-3"><dt class="text-slate-500">Nivel predare</dt><dd class="font-medium text-slate-800"><?= esc_html($teaching_level ?: '—'); ?></dd></div>
+      <div class="flex justify-between gap-3"><dt class="text-slate-500">Materie</dt><dd class="font-medium text-slate-800"><?= esc_html($materie ?: '—'); ?></dd></div>
+      <div class="flex justify-between gap-3"><dt class="text-slate-500">Segment RSOI</dt><dd class="font-medium text-slate-800"><?= esc_html($segment_rsoi ?: '—'); ?></dd></div>
+      <div class="flex justify-between gap-3"><dt class="text-slate-500">Cod SLF</dt><dd class="font-medium text-slate-800"><?= esc_html($cod_slf ?: '—'); ?></dd></div>
+      <div class="flex justify-between gap-3"><dt class="text-slate-500">Cohorte</dt><dd class="font-medium text-slate-800"><?= esc_html($cohorte ?: '—'); ?></dd></div>
+    </dl>
+  </div>
+
+  <div class="p-5 bg-white border shadow-sm rounded-2xl border-slate-200">
+    <h2 class="mb-4 text-sm font-semibold tracking-wide uppercase text-slate-800">Mentori alocați</h2>
+    <?php
+      $mentor_sel_name = es_full_name($mentor_sel) ?: 'Nedefinit';
+      $mentor_lit_name = es_full_name($mentor_lit) ?: 'Nedefinit';
+      $mentor_num_name = es_full_name($mentor_num) ?: 'Nedefinit';
+    ?>
+    <ul class="space-y-3">
+      <li class="flex items-center justify-between px-3 py-2 border rounded-lg border-slate-200"><span class="text-slate-600">Mentor SEL</span><strong class="text-slate-900"><?= esc_html($mentor_sel_name); ?></strong></li>
+      <li class="flex items-center justify-between px-3 py-2 border rounded-lg border-slate-200"><span class="text-slate-600">Mentor Literație</span><strong class="text-slate-900"><?= esc_html($mentor_lit_name); ?></strong></li>
+      <li class="flex items-center justify-between px-3 py-2 border rounded-lg border-slate-200"><span class="text-slate-600">Mentor Numerație</span><strong class="text-slate-900"><?= esc_html($mentor_num_name); ?></strong></li>
+    </ul>
+  </div>
+  
   <div class="space-y-6">
     <div class="p-5 bg-white border shadow-sm rounded-2xl border-slate-200">
       <h2 class="mb-3 text-sm font-semibold tracking-wide uppercase text-slate-800">Tutor alocat</h2>
@@ -242,35 +274,6 @@ get_header('blank');
       }
       ?>
     </div>
-  </div>
-
-  <div class="p-5 bg-white border shadow-sm rounded-2xl border-slate-200">
-    <h2 class="mb-4 text-sm font-semibold tracking-wide uppercase text-slate-800">Date educaționale & administrative</h2>
-    <dl class="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-      <div class="flex justify-between gap-3"><dt class="text-slate-500">Generație</dt><dd class="font-medium text-slate-800"><?= esc_html($generation ?: '—'); ?></dd></div>
-      <div class="flex justify-between gap-3"><dt class="text-slate-500">An program</dt><dd class="font-medium text-slate-800"><?= esc_html($program_year ?: '—'); ?></dd></div>
-      <div class="flex justify-between gap-3"><dt class="text-slate-500">Statut</dt><dd class="font-medium text-slate-800"><?= esc_html($statut ?: ($status ?: '—')); ?></dd></div>
-      <div class="flex justify-between gap-3"><dt class="text-slate-500">Calificare</dt><dd class="font-medium text-slate-800"><?= esc_html($qualification ?: '—'); ?></dd></div>
-      <div class="flex justify-between gap-3"><dt class="text-slate-500">Experiență</dt><dd class="font-medium text-slate-800"><?= esc_html($experience ?: '—'); ?></dd></div>
-      <div class="flex justify-between gap-3"><dt class="text-slate-500">Nivel predare</dt><dd class="font-medium text-slate-800"><?= esc_html($teaching_level ?: '—'); ?></dd></div>
-      <div class="flex justify-between gap-3"><dt class="text-slate-500">Materie</dt><dd class="font-medium text-slate-800"><?= esc_html($materie ?: '—'); ?></dd></div>
-      <div class="flex justify-between gap-3"><dt class="text-slate-500">Segment RSOI</dt><dd class="font-medium text-slate-800"><?= esc_html($segment_rsoi ?: '—'); ?></dd></div>
-      <div class="flex justify-between gap-3"><dt class="text-slate-500">Cod SLF</dt><dd class="font-medium text-slate-800"><?= esc_html($cod_slf ?: '—'); ?></dd></div>
-    </dl>
-  </div>
-
-  <div class="p-5 bg-white border shadow-sm rounded-2xl border-slate-200">
-    <h2 class="mb-4 text-sm font-semibold tracking-wide uppercase text-slate-800">Mentori alocați</h2>
-    <?php
-      $mentor_sel_name = es_full_name($mentor_sel) ?: 'Nedefinit';
-      $mentor_lit_name = es_full_name($mentor_lit) ?: 'Nedefinit';
-      $mentor_num_name = es_full_name($mentor_num) ?: 'Nedefinit';
-    ?>
-    <ul class="space-y-3">
-      <li class="flex items-center justify-between px-3 py-2 border rounded-lg border-slate-200"><span class="text-slate-600">Mentor SEL</span><strong class="text-slate-900"><?= esc_html($mentor_sel_name); ?></strong></li>
-      <li class="flex items-center justify-between px-3 py-2 border rounded-lg border-slate-200"><span class="text-slate-600">Mentor Literație</span><strong class="text-slate-900"><?= esc_html($mentor_lit_name); ?></strong></li>
-      <li class="flex items-center justify-between px-3 py-2 border rounded-lg border-slate-200"><span class="text-slate-600">Mentor Numerație</span><strong class="text-slate-900"><?= esc_html($mentor_num_name); ?></strong></li>
-    </ul>
   </div>
 </section>
 

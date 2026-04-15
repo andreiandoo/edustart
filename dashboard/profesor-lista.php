@@ -67,7 +67,7 @@ if (!$gen) {
 if (!$gen) {
   get_header(); ?>
   <main class="wrap" style="max-width:1100px;margin:40px auto;">
-    <div class="p-4 text-red-800 bg-red-100 rounded">Nu s-a găsit nicio generație pentru vizualizare.</div>
+    <div class="p-4 text-red-800 bg-red-100 rounded">Nu s-a găsit nicio generație/clasă pentru vizualizare.</div>
   </main>
   <?php get_footer(); exit;
 }
@@ -97,7 +97,7 @@ if ($viewer_mode === 'UNKNOWN' && $is_prof_logged && $owner_prof_id === $logged_
 if ($viewer_mode === 'UNKNOWN') {
   get_header(); ?>
   <main class="wrap" style="max-width:1100px;margin:40px auto;">
-    <div class="p-4 text-red-800 bg-red-100 rounded">Nu ai permisiuni pentru această generație.</div>
+    <div class="p-4 text-red-800 bg-red-100 rounded">Nu ai permisiuni pentru această generație/clasă.</div>
   </main>
   <?php get_footer(); exit;
 }
@@ -418,7 +418,7 @@ get_header('blank'); ?>
       <div class="flex items-center gap-2 font-semibold text-slate-800">
         <?php if (isset($student_count)): ?>
           <span class="inline-flex items-center text-xs uppercase text-slate-400">
-            Elevi in generație
+            Elevi în generație/clasă
           </span>
           <span class="inline-flex items-center px-2 py-1 text-sm font-medium rounded-md bg-white/90 text-slate-800">
             <?php echo (int)$student_count; ?>
@@ -441,7 +441,7 @@ get_header('blank'); ?>
 
       <!-- Selector generație (ID — Nume (Nivel) · An) -->
       <form method="get" class="flex items-center gap-2">
-        <label for="genSelect" class="inline-flex items-center text-xs font-semibold uppercase text-slate-400">Generație</label>
+        <label for="genSelect" class="inline-flex items-center text-xs font-semibold uppercase text-slate-400">Generație/clasa</label>
         <select id="genSelect" name="gen"
                 class="px-2 py-1 text-sm font-medium rounded-md bg-white/90 text-slate-800 focus:outline-none"
                 onchange="this.form.submit()">
@@ -592,34 +592,7 @@ get_header('blank'); ?>
               </div>
             </div>
 
-            <div class="relative -mx-5 overflow-x-auto">
-              <table id="studentsTable" class="min-w-[900px] relative w-full text-sm border-separate border-spacing-0">
-                <thead class="sticky top-0 bg-sky-800">
-                  <tr class="text-white">
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70">Prenume</th>
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70">Nume</th>
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70">Vârstă</th>
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70">Gen</th>
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70 class_label_th">Clasa</th>
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70">Sit. absenteism</th>
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70 frecventa_th">Frecvență grădiniță</th>
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70 bursa_th">Bursă socială</th>
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70">Limba diferită</th>
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70 cauze_abs_th">Cauze absenteism</th>
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70 risc_abandon_th">Risc abandon</th>
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70">Repetă clasa</th>
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70">Observație</th>
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70">Alte observații</th>
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70 demers_familie_th">Demers familie</th>
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70 demers_conducere_th">Demers conducere</th>
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70 demers_consilier_th">Demers consilier</th>
-                    <th class="p-3 font-semibold text-left border-b border-slate-700/70">Mențiuni</th>
-                    <th class="p-3 font-semibold text-center border-b border-slate-700/70">Ștergere</th>
-                  </tr>
-                </thead>
-                <tbody id="studentsContainer" class="bg-white divide-y divide-slate-200"></tbody>
-              </table>
-            </div>
+            <div id="studentsContainer" class="space-y-4"></div>
 
             <div class="flex items-center justify-end gap-3 pt-2">
               <button type="submit"
@@ -655,7 +628,7 @@ get_header('blank'); ?>
        data-num-t0-slug="<?php echo esc_attr($num_t0_slug); ?>"
        data-num-t1-slug="<?php echo esc_attr($num_t1_slug); ?>"
   >
-    <div class="text-gray-500"><?php echo $gen ? 'Se încarcă elevii...' : 'Nu ai încă nicio generație.'; ?></div>
+    <div class="text-gray-500"><?php echo $gen ? 'Se încarcă elevii...' : 'Nu ai încă nicio generație/clasă.'; ?></div>
   </div>
 </div>
 
@@ -754,7 +727,7 @@ window.__EDU_EVAL_ACTIVE = {
   /* ---------------- Make a trigger fully inert ---------------- */
   function inertize($el){
     $el.addClass("opacity-50 cursor-not-allowed pointer-events-none")
-       .attr({"aria-disabled":"true","tabindex":"-1","data-disabled":"1","title":"Evaluarea este dezactivată pe această generație."});
+       .attr({"aria-disabled":"true","tabindex":"-1","data-disabled":"1","title":"Evaluarea este dezactivată pe această generație/clasă."});
     if ($el.is("a")) {
       if (!$el.data("href")) $el.data("href", $el.attr("href") || "");
       $el.attr("href","#");
@@ -851,11 +824,11 @@ window.__EDU_EVAL_ACTIVE = {
     $("#renameGenBtn").on("click", function(){
       if (!genId) return;
       const cur  = <?php echo json_encode($gen ? (string)$gen->name : ''); ?>;
-      const name = prompt("Noul nume pentru generație:", cur || "");
+      const name = prompt("Noul nume pentru generație/clasă:", cur || "");
       if (name === null) return;
       $.post(ajaxurl, { action:'edu_rename_generation', generation_id: genId, name }, function(res){
         if (res && res.success) location.reload();
-        else alert(res && res.data ? res.data : "Eroare la redenumire generație.");
+        else alert(res && res.data ? res.data : "Eroare la redenumire generație/clasă.");
       });
     });
     <?php endif; ?>

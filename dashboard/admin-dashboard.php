@@ -169,14 +169,14 @@ $last_tutori    = ad_last_active_users_by_role('tutor', 8);
     <div class="flex items-center justify-between w-full gap-x-4">
       <h1 class="text-3xl tracking-tight text-white">Buna <span class="font-bold"><?php echo $user_fname;?></span></h1>
       <!-- FAB + Modal (mobile only) -->
-      <button id="fab-actions" type="button" class="hidden mobile:flex items-center justify-center text-white rounded-full shadow-lg md:hidden bottom-6 right-6 w-14 h-14 bg-es-orange hover:bg-orange-600 active:scale-95" aria-label="Meniu acțiuni">
+      <button id="fab-actions" type="button" class="items-center justify-center hidden text-white rounded-full shadow-lg mobile:flex md:hidden bottom-6 right-6 w-14 h-14 bg-es-orange hover:bg-orange-600 active:scale-95" aria-label="Meniu acțiuni">
         <svg id="fab-icon-menu" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
         <svg id="fab-icon-close" class="hidden w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
     </div>
 
     <!-- Action bar (desktop only) -->
-    <div class="flex-wrap items-center hidden gap-2 md:flex">
+    <div class="flex-wrap items-center flex-none hidden gap-2 md:flex">
       <a href="<?php echo esc_url( home_url('/panou/profesori') ); ?>" class="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold text-white transition-all duration-150 ease-in-out border rounded hover:bg-slate-800 border-slate-100/30 hover:border-transparent">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h18v2H3zM3 9h18v2H3zM3 14h18v2H3zM3 19h18v2H3z"/></svg>
         Lista profesori
@@ -184,10 +184,6 @@ $last_tutori    = ad_last_active_users_by_role('tutor', 8);
       <a href="<?php echo esc_url( home_url('/panou/elevi') ); ?>" class="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold text-white transition-all duration-150 ease-in-out border rounded hover:bg-slate-800 border-slate-100/30 hover:border-transparent">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-5.33 0-8 2.667-8 6a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1c0-3.333-2.67-6-8-6Z"/></svg>
         Lista elevi
-      </a>
-      <a href="<?php echo esc_url( home_url('/panou/rapoarte') ); ?>" class="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold text-white transition-all duration-150 ease-in-out border rounded hover:bg-slate-800 border-slate-100/30 hover:border-transparent">
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-5.33 0-8 2.667-8 6a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1c0-3.333-2.67-6-8-6Z"/></svg>
-        Lista rapoarte
       </a>
       <a href="<?php echo esc_url( home_url('/panou/notificari') ); ?>" class="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold text-white transition-all duration-150 ease-in-out border rounded hover:bg-slate-800 border-slate-100/30 hover:border-transparent">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-5.33 0-8 2.667-8 6a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1c0-3.333-2.67-6-8-6Z"/></svg>

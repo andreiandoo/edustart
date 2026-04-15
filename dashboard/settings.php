@@ -171,7 +171,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php if ($profile_image_id): ?>
               <img id="profilePreview" src="<?= esc_url(wp_get_attachment_image_url($profile_image_id, 'medium')); ?>" class="object-cover size-24" alt="Profil">
             <?php else: ?>
-              <img id="profilePreview" src="<?= esc_url(get_template_directory_uri().'/assets/images/default-profile.png'); ?>" class="object-cover size-24" alt="Profil">
+              <img id="profilePreview" src="<?= esc_url(get_template_directory_uri().'/assets/images/default-teach.svg'); ?>" class="object-cover size-24" alt="Profil">
             <?php endif; ?>
           </div>
         </div>

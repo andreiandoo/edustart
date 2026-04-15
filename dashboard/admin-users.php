@@ -185,14 +185,14 @@ $qs = $_GET; unset($qs['paged']); $base_url = esc_url(add_query_arg($qs, remove_
 
 <!-- Filtre -->
 <section class="flex items-end justify-between px-6 my-6 gap-x-4 mobile:px-2">
-  <form method="get" class="grid items-end grid-cols-1 gap-3 md:grid-cols-12 w-full">
+  <form method="get" class="grid items-end w-full grid-cols-12 gap-3 md:grid-cols-12">
     <div class="md:col-span-3 mobile:cols-span-12">
         <label class="block mb-1 text-xs font-medium text-slate-600">Căutare (nume/email)</label>
         <input type="text" name="s" value="<?php echo esc_attr($s); ?>"
                 class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-600 focus:border-transparent">
     </div>
-    <div class="mobile:grid mobile:grid-cols-12 mobile:items-end mobile:gap-x-2 ">
-      <div class="md:col-span-2 mobile:col-span-5">
+    <div class="md:col-span-9 mobile:grid mobile:grid-cols-12 mobile:items-end mobile:gap-x-2 ">
+      <div class="mobile:col-span-5">
           <label class="block mb-1 text-xs font-medium text-slate-600">Rol</label>
           <select name="role" class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-600 focus:border-transparent">
           <option value="">— Oricare —</option>
@@ -201,12 +201,12 @@ $qs = $_GET; unset($qs['paged']); $base_url = esc_url(add_query_arg($qs, remove_
           <?php endforeach; ?>
           </select>
       </div>
-      <div class="md:col-span-2 mobile:col-span-5">
+      <div class="mobile:col-span-5">
           <label class="block mb-1 text-xs font-medium text-slate-600">Pe pagină</label>
           <input type="number" min="5" max="200" name="perpage" value="<?php echo (int)$perpage; ?>"
                   class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-600 focus:border-transparent">
       </div>
-      <div class="md:col-span-3 mobile:col-span-2">
+      <div class="mobile:col-span-2">
           <button type="submit"
                   class="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-white shadow-sm rounded-xl bg-emerald-600 hover:bg-emerald-700">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4">

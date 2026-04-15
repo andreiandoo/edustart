@@ -34,7 +34,7 @@ jQuery(function ($) {
   (function ensureClassOptions() {
     if (typeof window.classOptions === "function") return;
     const MAP = {
-      prescolar: ["Grupa mica", "Grupa mare", "Grupa pregatitoare"],
+      prescolar: ["Grupa mica", "Grupa mijlocie", "Grupa mare"],
       primar: ["Clasa 0", "Clasa 1", "Clasa 2", "Clasa 3", "Clasa 4"],
       gimnazial: ["Clasa 5", "Clasa 6", "Clasa 7", "Clasa 8"],
       liceu: ["Clasa 9", "Clasa 10", "Clasa 11", "Clasa 12", "Clasa 13"],
@@ -69,153 +69,183 @@ jQuery(function ($) {
       .map((v) => `<option value="${v}">${v}</option>`)
       .join("");
 
-    // utilitare UI – aceleași pentru toate input-urile
-    const baseInput =
-      "w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500";
-    const baseSelect = baseInput + " pr-8";
-    const td = "p-2 align-top";
-    const trCls = "even:bg-slate-50 hover:bg-slate-50/60 transition-colors";
+    const inp = "w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500";
+    const sel = inp + " pr-8";
+    const lbl = "text-xs font-medium text-slate-500";
 
-    const row = $(`
-      <tr class="${trCls}" data-idx="${idx}">
-        <td class="${td}">
-          <input type="text" placeholder="Ex. Ana" name="students[${idx}][first_name]" required class="${baseInput}">
-        </td>
-        <td class="${td}">
-          <input type="text" placeholder="Ex. Popescu" name="students[${idx}][last_name]" required class="${baseInput}">
-        </td>
-        <td class="${td}">
-          <div class="flex items-center gap-2">
-            <input type="number" placeholder="10" name="students[${idx}][age]" required min="1" max="20" class="${baseInput} w-24">
-            <span class="text-xs text-slate-500">ani</span>
-          </div>
-        </td>
-        <td class="${td}">
-          <select name="students[${idx}][gender]" required class="${baseSelect}">
-            <option value=""></option>
-            <option value="M">M</option>
-            <option value="F">F</option>
-          </select>
-        </td>
-        <td class="${td} class_label_col">
-          <select name="students[${idx}][class_label]" class="${baseSelect}">
-            <option value=""></option>
-            ${clsOptions}
-          </select>
-        </td>
-        <td class="${td}">
-          <select name="students[${idx}][sit_abs]" class="${baseSelect} sit-abs-select">
-            <option value=""></option>
-            <option value="Nu absentează deloc">Nu absentează deloc</option>
-            <option value="Absentează uneori/rar">Absentează uneori/rar</option>
-            <option value="Absentează des">Absentează des</option>
-            <option value="Absentează foarte des">Absentează foarte des</option>
-            <option value="Nu a venit niciodată">Nu a venit niciodată</option>
-          </select>
-        </td>
-        <td class="${td} frecventa_col">
-          <select name="students[${idx}][frecventa]" class="${baseSelect}">
-            <option value=""></option>
-            <option value="Nu">Nu</option>
-            <option value="Da (1an)">Da (1an)</option>
-            <option value="Da (2ani)">Da (2ani)</option>
-            <option value="Da (3ani)">Da (3ani)</option>
-            <option value="Da (4ani)">Da (4ani)</option>
-            <option value="Date indisponibile">Date indisponibile</option>
-          </select>
-        </td>
-        <td class="${td} bursa_col">
-          <select name="students[${idx}][bursa]" class="${baseSelect}">
-            <option value=""></option>
-            <option value="Nu">Nu</option>
-            <option value="Da">Da</option>
-          </select>
-        </td>
-        <td class="${td}">
-          <select name="students[${idx}][dif_limba]" class="${baseSelect}">
-            <option value=""></option>
-            <option value="Nu">Nu</option>
-            <option value="Da">Da</option>
-          </select>
-        </td>
-        <td class="${td} cauze-abs-cell" style="display:none;">
-          <textarea name="students[${idx}][cauze_abs]" rows="2" placeholder="" class="${baseInput}"></textarea>
-        </td>
-        <td class="${td} risc-abandon-cell" style="display:none;">
-          <select name="students[${idx}][risc_abandon]" class="${baseSelect}">
-            <option value=""></option>
-            <option value="Da">Da</option>
-            <option value="Nu">Nu</option>
-          </select>
-        </td>
-        <td class="${td}">
-          <select name="students[${idx}][repeta_clasa]" class="${baseSelect}">
-            <option value=""></option>
-            <option value="Da">Da</option>
-            <option value="Nu">Nu</option>
-          </select>
-        </td>
-        <td class="${td}">
-          <select name="students[${idx}][observation]" class="${baseSelect} obs-select">
-            <option value=""></option>
-            <option value="abandon">Abandon</option>
-            <option value="plecat_tara">A plecat din țară</option>
-            <option value="transferat_din">S-a transferat din clasă</option>
-            <option value="transferat_in">S-a transferat în clasă</option>
-          </select>
-        </td>
-        <td class="${td}">
-          <textarea name="students[${idx}][alte_obs]" rows="2" placeholder="Ex. cazuri CES, situații speciale" class="${baseInput}"></textarea>
-        </td>
-        <td class="${td} demers-familie-cell">
-          <span class="demers-na text-xs text-slate-400">Nu este cazul</span>
-          <select name="students[${idx}][demers_familie]" class="${baseSelect} demers-select" style="display:none;">
-            <option value=""></option>
-            <option value="Da">Da</option>
-            <option value="Nu">Nu</option>
-            <option value="Nu a fost cazul">Nu a fost cazul</option>
-          </select>
-        </td>
-        <td class="${td} demers-conducere-cell">
-          <span class="demers-na text-xs text-slate-400">Nu este cazul</span>
-          <select name="students[${idx}][demers_conducere]" class="${baseSelect} demers-select" style="display:none;">
-            <option value=""></option>
-            <option value="Da">Da</option>
-            <option value="Nu">Nu</option>
-            <option value="Nu a fost cazul">Nu a fost cazul</option>
-          </select>
-        </td>
-        <td class="${td} demers-consilier-cell">
-          <span class="demers-na text-xs text-slate-400">Nu este cazul</span>
-          <select name="students[${idx}][demers_consilier]" class="${baseSelect} demers-select" style="display:none;">
-            <option value=""></option>
-            <option value="Da">Da</option>
-            <option value="Nu">Nu</option>
-            <option value="Nu a fost cazul">Nu a fost cazul</option>
-          </select>
-        </td>
-        <td class="${td} notes-cell">
-          <textarea name="students[${idx}][notes]" rows="2" placeholder="Detalii (opțional)" style="display:none;" class="${baseInput}"></textarea>
-        </td>
-        <td class="p-2 text-center">
-          <button type="button" class="remove-student-row inline-flex items-center gap-1 rounded-lg bg-red-600 px-3 py-1 text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+    const showFrec = ["Prescolar", "Primar", "Primar Mic", "Primar Mare"].includes(level);
+    const showBursa = ["Primar", "Primar Mic", "Primar Mare", "Gimnazial"].includes(level);
+
+    const card = $(`
+      <div class="student-card relative border border-slate-200 rounded-xl bg-white shadow-sm" data-idx="${idx}">
+        <!-- Header -->
+        <div class="flex items-center justify-between px-4 py-2 border-b rounded-t-xl bg-slate-50 border-slate-200">
+          <span class="text-sm font-semibold text-slate-700">
+            <span class="text-slate-400">#${idx + 1}</span>
+            <span class="student-card-name ml-1"></span>
+          </span>
+          <button type="button" class="remove-student-row inline-flex items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1 text-xs text-white shadow-sm hover:bg-rose-700">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
             </svg>
+            Șterge
           </button>
-        </td>
-      </tr>
+        </div>
+
+        <div class="px-4 py-3">
+          <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div>
+              <label class="${lbl}">Prenume</label>
+              <input type="text" placeholder="Ex. Ana" name="students[${idx}][first_name]" required class="${inp}">
+            </div>
+            <div>
+              <label class="${lbl}">Nume</label>
+              <input type="text" placeholder="Ex. Popescu" name="students[${idx}][last_name]" required class="${inp}">
+            </div>
+            <div>
+              <label class="${lbl}">Vârstă *</label>
+              <input type="number" placeholder="10" name="students[${idx}][age]" required min="1" max="20" class="${inp}">
+            </div>
+            <div>
+              <label class="${lbl}">Gen *</label>
+              <select name="students[${idx}][gender]" required class="${sel}">
+                <option value=""></option>
+                <option value="M">M</option>
+                <option value="F">F</option>
+              </select>
+            </div>
+            <div class="class_label_col">
+              <label class="${lbl}">Clasa *</label>
+              <select name="students[${idx}][class_label]" required class="${sel}">
+                <option value=""></option>
+                ${clsOptions}
+              </select>
+            </div>
+            <div>
+              <label class="${lbl}">Sit. absenteism</label>
+              <select name="students[${idx}][sit_abs]" class="${sel} sit-abs-select">
+                <option value=""></option>
+                <option value="Nu absentează deloc">Nu absentează deloc</option>
+                <option value="Absentează uneori/rar">Absentează uneori/rar</option>
+                <option value="Absentează des">Absentează des</option>
+                <option value="Absentează foarte des">Absentează foarte des</option>
+                <option value="Nu a venit niciodată">Nu a venit niciodată</option>
+              </select>
+            </div>
+            <div class="frecventa_col" ${showFrec ? '' : 'style="display:none;"'}>
+              <label class="${lbl}">Frecvență grădiniță</label>
+              <select name="students[${idx}][frecventa]" class="${sel}">
+                <option value=""></option>
+                <option value="Nu">Nu</option>
+                <option value="Da (1an)">Da (1an)</option>
+                <option value="Da (2ani)">Da (2ani)</option>
+                <option value="Da (3ani)">Da (3ani)</option>
+                <option value="Da (4ani)">Da (4ani)</option>
+                <option value="Date indisponibile">Date indisponibile</option>
+              </select>
+            </div>
+            <div class="bursa_col" ${showBursa ? '' : 'style="display:none;"'}>
+              <label class="${lbl}">Bursă socială</label>
+              <select name="students[${idx}][bursa]" class="${sel}">
+                <option value=""></option>
+                <option value="Nu">Nu</option>
+                <option value="Da">Da</option>
+              </select>
+            </div>
+            <div>
+              <label class="${lbl}">Limba diferită</label>
+              <select name="students[${idx}][dif_limba]" class="${sel}">
+                <option value=""></option>
+                <option value="Nu">Nu</option>
+                <option value="Da">Da</option>
+              </select>
+            </div>
+            <div>
+              <label class="${lbl}">Repetă clasa</label>
+              <select name="students[${idx}][repeta_clasa]" class="${sel}">
+                <option value=""></option>
+                <option value="Da">Da</option>
+                <option value="Nu">Nu</option>
+              </select>
+            </div>
+            <div>
+              <label class="${lbl}">Observație</label>
+              <select name="students[${idx}][observation]" class="${sel} obs-select">
+                <option value=""></option>
+                <option value="abandon">Abandon</option>
+                <option value="plecat_tara">A plecat din țară</option>
+                <option value="transferat_din">S-a transferat din clasă</option>
+                <option value="transferat_in">S-a transferat în clasă</option>
+              </select>
+            </div>
+            <div>
+              <label class="${lbl}">Alte observații</label>
+              <textarea name="students[${idx}][alte_obs]" rows="2" placeholder="Ex. cazuri CES" class="${inp}"></textarea>
+            </div>
+            <!-- Other conditional fields -->
+            <div class="cauze-abs-cell" style="display:none;">
+              <label class="${lbl}">Cauze absenteism</label>
+              <textarea name="students[${idx}][cauze_abs]" rows="2" placeholder="" class="${inp}"></textarea>
+            </div>
+            <div class="risc-abandon-cell" style="display:none;">
+              <label class="${lbl}">Risc abandon</label>
+              <select name="students[${idx}][risc_abandon]" class="${sel} risc-abandon-select">
+                <option value=""></option>
+                <option value="Da">Da</option>
+                <option value="Nu">Nu</option>
+              </select>
+            </div>
+            <div class="notes-cell" style="display:none;">
+              <label class="${lbl}">Mențiuni</label>
+              <textarea name="students[${idx}][notes]" rows="2" placeholder="Detalii (opțional)" class="${inp}"></textarea>
+            </div>
+          </div>
+
+          <!-- Demersuri section: hidden by default, shown when high absence -->
+          <div class="demersuri-section mt-3 pt-3 border-t border-amber-200 bg-amber-50/50 rounded-lg px-3 py-2" style="display:none;">
+            <p class="text-xs font-semibold text-amber-800 mb-2">In caz de absenteism cronic, ce demersuri ați intreprins?</p>
+            <div class="grid grid-cols-3 gap-2">
+              <div class="demers-familie-cell">
+                <label class="${lbl}">Am discutat cu familia</label>
+                <select name="students[${idx}][demers_familie]" class="${sel} demers-select">
+                  <option value=""></option>
+                  <option value="Da">Da</option>
+                  <option value="Nu">Nu</option>
+                  <option value="Nu a fost cazul">Nu a fost cazul</option>
+                </select>
+              </div>
+              <div class="demers-conducere-cell">
+                <label class="${lbl}">Am discutat cu conducerea școlii</label>
+                <select name="students[${idx}][demers_conducere]" class="${sel} demers-select">
+                  <option value=""></option>
+                  <option value="Da">Da</option>
+                  <option value="Nu">Nu</option>
+                  <option value="Nu a fost cazul">Nu a fost cazul</option>
+                </select>
+              </div>
+              <div class="demers-consilier-cell">
+                <label class="${lbl}">Am apelat la consilier / mediator școlar</label>
+                <select name="students[${idx}][demers_consilier]" class="${sel} demers-select">
+                  <option value=""></option>
+                  <option value="Da">Da</option>
+                  <option value="Nu">Nu</option>
+                  <option value="Nu a fost cazul">Nu a fost cazul</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     `);
 
-    // vizibilitate condițională (compat)
-    if (!["Prescolar", "Primar"].includes(level)) {
-      row.find(".frecventa_col").hide();
-    }
-    if (!["Primar", "Gimnazial"].includes(level)) {
-      row.find(".bursa_col").hide();
-    }
+    // Live name update in card header
+    card.find('[name$="[first_name]"], [name$="[last_name]"]').on('input', function(){
+      const fn = card.find('[name$="[first_name]"]').val() || '';
+      const ln = card.find('[name$="[last_name]"]').val() || '';
+      card.find('.student-card-name').text((fn + ' ' + ln).trim());
+    });
 
-    $("#studentsContainer").append(row);
+    $("#studentsContainer").append(card);
   }
 
   $("#studentCount").on("change", function () {
@@ -227,7 +257,7 @@ jQuery(function ($) {
   });
 
   $(document).on("click", ".remove-student-row", function () {
-    $(this).closest("tr").remove();
+    $(this).closest(".student-card").remove();
   });
 
   $(document).on("input", 'input[name^="students"][name$="[age]"]', function () {
@@ -238,36 +268,50 @@ jQuery(function ($) {
   });
 
   $(document).on("change", ".obs-select", function () {
-    const $row = $(this).closest("tr");
-    const notesTa = $row.find(".notes-cell textarea");
-    this.value ? notesTa.show() : notesTa.hide().val("");
+    const $row = $(this).closest(".student-card, form");
+    const $notesCell = $row.find(".notes-cell");
+    this.value ? $notesCell.show() : $notesCell.hide().find("textarea").val("");
   });
 
   // Conditional logic: sit_abs → cauze_abs, risc_abandon, demers_*
   $(document).on("change", ".sit-abs-select", function () {
-    const $row = $(this).closest("tr, form");
+    const $row = $(this).closest(".student-card, form");
     const val = $(this).val() || "";
-    const showExtra = ["Absentează des", "Absentează foarte des", "Nu a venit niciodată"].includes(val);
+    const highAbsence = ["Absentează des", "Absentează foarte des", "Nu a venit niciodată"].includes(val);
+    const anyAbsence = val !== "" && val !== "Nu absentează deloc";
 
-    // cauze_abs & risc_abandon: show/hide
-    $row.find(".cauze-abs-cell").toggle(showExtra);
-    $row.find(".risc-abandon-cell").toggle(showExtra);
-    if (!showExtra) {
+    // cauze_abs: show cell when any absence
+    $row.find(".cauze-abs-cell").toggle(anyAbsence);
+    if (!anyAbsence) {
       $row.find("[name*='cauze_abs']").val("");
+    }
+
+    // risc_abandon: show cell when high absence, color red
+    const $riscCell = $row.find(".risc-abandon-cell");
+    $riscCell.toggle(highAbsence);
+    if (highAbsence) {
+      $riscCell.addClass("bg-rose-50 rounded-lg p-1");
+      $riscCell.find(".risc-abandon-select").addClass("border-rose-400 text-rose-700 ring-1 ring-rose-300");
+    } else {
+      $riscCell.removeClass("bg-rose-50 rounded-lg p-1");
+      $riscCell.find(".risc-abandon-select").removeClass("border-rose-400 text-rose-700 ring-1 ring-rose-300");
       $row.find("[name*='risc_abandon']").val("");
     }
 
-    // demers_*: show select / show "Nu este cazul"
-    $row.find(".demers-familie-cell, .demers-conducere-cell, .demers-consilier-cell").each(function () {
-      const $cell = $(this);
-      if (showExtra) {
-        $cell.find(".demers-na").hide();
-        $cell.find(".demers-select").show();
+    // demers section: show/hide the entire section
+    // Look inside $row first (card layout), then siblings (edit form layout)
+    let $demersSection = $row.find(".demersuri-section");
+    if (!$demersSection.length) {
+      $demersSection = $row.siblings(".demersuri-section").add($row.parent().find(".demersuri-section"));
+    }
+    if ($demersSection.length) {
+      if (highAbsence) {
+        $demersSection.show();
       } else {
-        $cell.find(".demers-na").show();
-        $cell.find(".demers-select").hide().val("");
+        $demersSection.hide();
+        $demersSection.find(".demers-select").val("");
       }
-    });
+    }
   });
 
   // Salvare elevi (FormData -> admin-ajax.php)
@@ -284,7 +328,7 @@ jQuery(function ($) {
     fd.append("class_id", "0");
 
     // construim students[0][first_name] ... ca să fim 100% compatibili cu PHP
-    $form.find("tbody tr").each(function () {
+    $form.find(".student-card").each(function () {
       const $tr = $(this);
       const i = $tr.data("idx");
       const pick = (name) =>

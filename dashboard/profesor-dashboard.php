@@ -287,16 +287,15 @@ $toast_msg = isset($_GET['msg']) ? sanitize_text_field(wp_unslash($_GET['msg']))
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Bun venit, <?php echo esc_html($full_name); ?> 👋</h1>
         <p class="mt-1 text-slate-500">
-          Panorama activității tale <?php echo $selected_gen ? 'pentru generația selectată' : 'pe toate generațiile'; ?>.
+          Panorama activității tale <?php echo $selected_gen ? 'pentru generația/clasa selectată' : 'pe toate generațiile/clasele'; ?>.
         </p>
       </div>
 
       <!-- Filtru generație -->
       <form method="get" class="flex items-center gap-3">
-        <label for="generation_id" class="text-sm text-slate-600">Gen.: </label>
         <select id="generation_id" name="generation_id"
                 class="px-3 py-2 text-sm bg-white shadow-sm rounded-xl border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200">
-          <option value="0"<?php selected($selected_gen, 0); ?>>Toate generațiile</option>
+          <option value="0"<?php selected($selected_gen, 0); ?>>Toate generațiile/clasele</option>
           <?php if (!empty($generations)): ?>
             <?php foreach ($generations as $gen): ?>
               <option value="<?php echo (int)$gen->id; ?>" <?php selected($selected_gen, (int)$gen->id); ?>>
@@ -324,7 +323,7 @@ $toast_msg = isset($_GET['msg']) ? sanitize_text_field(wp_unslash($_GET['msg']))
   <section class="grid grid-cols-1 gap-4 px-6 mt-6 sm:grid-cols-2 xl:grid-cols-4">
     <div class="p-5 bg-white border shadow-sm rounded-2xl border-slate-200">
       <div class="flex items-center justify-between">
-        <p class="text-sm text-slate-500">Generații</p>
+        <p class="text-sm text-slate-500">Generații/clase</p>
         <span class="px-2 py-1 text-xs rounded-lg bg-slate-100">total</span>
       </div>
       <div class="mt-2 text-3xl font-semibold tracking-tight"><?php echo number_format_i18n($total_generations); ?></div>
@@ -339,11 +338,7 @@ $toast_msg = isset($_GET['msg']) ? sanitize_text_field(wp_unslash($_GET['msg']))
       <div class="mt-2 text-3xl font-semibold tracking-tight"><?php echo number_format_i18n($total_students); ?></div>
       <p class="mt-1 text-xs text-slate-500">
         Înregistrați
-        <span class="ml-2 inline-flex items-center gap-1 rounded-md bg-rose-50 text-rose-700 ring-1 ring-rose-200 px-2 py-0.5">
-            Remedial: <strong class="font-medium"><?php echo (int)$remedial_count; ?></strong>
-        </span>
-        </p>
-
+      </p>
     </div>
 
     <div class="p-5 bg-white border shadow-sm rounded-2xl border-slate-200">
@@ -371,7 +366,12 @@ $toast_msg = isset($_GET['msg']) ? sanitize_text_field(wp_unslash($_GET['msg']))
       <div class="flex items-center justify-between p-5 border-b border-slate-100">
         <h2 class="text-base font-semibold tracking-tight">Evaluări recente</h2>
         <a href="<?php echo esc_url(home_url('/panou/evaluari')); ?>"
-           class="text-sm text-slate-600 hover:text-slate-900 underline-offset-4 hover:underline">Vezi toate evaluările</a>
+           class="text-sm text-slate-600 hover:text-slate-900 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 hover:bg-slate-50 active:scale-[.98]">
+           Vezi toate evaluările
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+              <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+            </svg>
+          </a>
       </div>
 
       <div class="overflow-x-auto">
@@ -379,7 +379,7 @@ $toast_msg = isset($_GET['msg']) ? sanitize_text_field(wp_unslash($_GET['msg']))
           <thead class="bg-slate-50 text-slate-600">
             <tr>
               <th class="px-5 py-3 font-medium text-left">Student</th>
-              <th class="px-5 py-3 font-medium text-left">Generație</th>
+              <th class="px-5 py-3 font-medium text-left">Generație/clasă</th>
               <th class="px-5 py-3 font-medium text-left">Modul</th>
               <th class="px-5 py-3 font-medium text-left">Etapă</th>
               <th class="px-5 py-3 font-medium text-left">Stare</th>
@@ -479,7 +479,7 @@ $toast_msg = isset($_GET['msg']) ? sanitize_text_field(wp_unslash($_GET['msg']))
                 </td>
               </tr>
             <?php endforeach; else: ?>
-              <tr><td colspan="4" class="px-5 py-6 text-center text-slate-500">Nu ai încă nicio generație.</td></tr>
+              <tr><td colspan="4" class="px-5 py-6 text-center text-slate-500">Nu ai încă nicio generație/clasă.</td></tr>
             <?php endif; ?>
           </tbody>
         </table>

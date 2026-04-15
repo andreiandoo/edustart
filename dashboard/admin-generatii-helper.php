@@ -101,21 +101,34 @@ if (!function_exists('admin_gen_build_cards_all')) {
       ORDER BY s.generation_id DESC
     ");
 
-    if (empty($pairs)) {
-      return ['cards'=>[], 'years'=>[], 'levels'=>[], 'total'=>0];
+    // 2) Map info generații (toate, inclusiv cele fără elevi)
+    $all_gens = $wpdb->get_results("
+      SELECT id, name, year, level, professor_id, created_at
+      FROM {$tbl_generations}
+      ORDER BY id DESC
+    ");
+    $gen_map = [];
+    foreach ($all_gens as $r) $gen_map[(int)$r->id] = $r;
+
+    // Adaugăm generațiile fără elevi ca perechi cu students_count=0
+    $pairs_set = []; // "gid-pid" => true
+    foreach ($pairs as $p) {
+      $pairs_set[(int)$p->generation_id . '-' . (int)$p->professor_id] = true;
+    }
+    foreach ($all_gens as $g) {
+      $gid = (int)$g->id;
+      $pid = (int)($g->professor_id ?? 0);
+      if ($pid > 0 && !isset($pairs_set[$gid . '-' . $pid])) {
+        $obj = new \stdClass();
+        $obj->generation_id = $gid;
+        $obj->professor_id  = $pid;
+        $obj->students_count = 0;
+        $pairs[] = $obj;
+      }
     }
 
-    // 2) Map info generații (id => row)
-    $gen_ids = array_values(array_unique(array_map(fn($p)=>(int)$p->generation_id, $pairs)));
-    $gen_map = [];
-    if (!empty($gen_ids)) {
-      $in = implode(',', array_fill(0, count($gen_ids), '%d'));
-      $rows = $wpdb->get_results($wpdb->prepare("
-        SELECT id, name, year, level, created_at
-        FROM {$tbl_generations}
-        WHERE id IN ($in)
-      ", ...$gen_ids));
-      foreach ($rows as $r) $gen_map[(int)$r->id] = $r;
+    if (empty($pairs)) {
+      return ['cards'=>[], 'years'=>[], 'levels'=>[], 'total'=>0];
     }
 
     // 3) Map tutor pentru profesori
@@ -144,7 +157,13 @@ if (!function_exists('admin_gen_build_cards_all')) {
 
       $gen  = $gen_map[$gid] ?? null;
       $gname= $gen ? (string)$gen->name : '—';
-      $gyear= $gen ? (string)$gen->year : '';
+      $gyear_raw = $gen ? (string)$gen->year : '';
+      // Normalize: "2025" → "2025-2026"; leave "2025-2026" as-is
+      if ($gyear_raw !== '' && preg_match('/^\d{4}$/', $gyear_raw)) {
+        $gyear = $gyear_raw . '-' . ((int)$gyear_raw + 1);
+      } else {
+        $gyear = $gyear_raw;
+      }
       $glevel = $gen ? adg_level_label_norm($gen->level ?? '') : '—';
 
       if ($year_f !== '' && (string)$gyear !== (string)$year_f) continue;

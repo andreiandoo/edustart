@@ -567,8 +567,9 @@ function get_students_callback() {
   };
 
   // — Helper: buton evaluare (activ sau disabled)
-  $render_eval_btn = function($label, $proc, $type, $slug, $student_id) use ($can_edit) {
+  $render_eval_btn = function($label, $proc, $type, $slug, $student_id, $status = '') use ($can_edit) {
     $proc = (int) $proc;
+    $is_draft = ($proc > 0 && $status === 'draft');
 
     $color = 'bg-slate-100 text-slate-800 ring-slate-200';
     if     ($proc >= 75) $color = 'bg-emerald-600 text-white ring-emerald-600/20';
@@ -576,19 +577,27 @@ function get_students_callback() {
     elseif ($proc >= 25) $color = 'bg-yellow-400 text-slate-900 ring-yellow-300/40';
     elseif ($proc > 0)   $color = 'bg-rose-600 text-white ring-rose-600/20';
 
+    $draft_icon = $is_draft
+      ? '<span class="inline-flex items-center justify-center w-4 h-4 ml-1 text-[10px] font-bold text-amber-800 bg-amber-400 rounded-full shrink-0" title="Salvat temporar">!</span>'
+      : '';
+
     if ($can_edit) {
-      return '<button class="start-questionnaire inline-flex items-center justify-center px-2.5 py-1.5 text-xs font-medium rounded-full shadow-sm ring-1 ring-inset hover:opacity-95 '
+      return '<span class="inline-flex items-center">'
+             . '<button class="start-questionnaire inline-flex items-center justify-center px-2.5 py-1.5 text-xs font-medium rounded-full shadow-sm ring-1 ring-inset hover:opacity-95 '
              . esc_attr($color) . '"'
              . ' data-id="' . esc_attr($student_id) . '"'
              . ' data-type="' . esc_attr($type) . '"'
              . ' data-modul="' . esc_attr($slug) . '">'
-             . esc_html($label) . ' (' . $proc . '%)</button>';
+             . esc_html($label) . ' (' . $proc . '%)</button>'
+             . $draft_icon . '</span>';
     }
 
     // read-only (Tutor): vizibil dar neclickabil
-    return '<button class="inline-flex items-center justify-center px-2.5 py-1.5 text-xs font-medium rounded-full shadow-sm ring-1 ring-inset opacity-60 cursor-not-allowed '
+    return '<span class="inline-flex items-center">'
+           . '<button class="inline-flex items-center justify-center px-2.5 py-1.5 text-xs font-medium rounded-full shadow-sm ring-1 ring-inset opacity-60 cursor-not-allowed '
            . esc_attr($color) . '" disabled aria-disabled="true" tabindex="-1">'
-           . esc_html($label) . ' (' . $proc . '%)</button>';
+           . esc_html($label) . ' (' . $proc . '%)</button>'
+           . $draft_icon . '</span>';
   };
 
   ob_start();
@@ -640,21 +649,22 @@ function get_students_callback() {
                   $sel_group_slug = $resolve_sel_group_for_student($class_level, $student->class_label);
                   $sel_evals = [
                     ['base' => 'sel-t0', 'label' => 'SEL T0'],
-                    ['base' => 'sel-ti', 'label' => 'SEL Intermediar'],
+                    ['base' => 'sel-ti', 'label' => 'SEL Ti'],
                     ['base' => 'sel-t1', 'label' => 'SEL T1'],
                   ];
                   foreach ($sel_evals as $eval) {
                     $full_slug = $sel_group_slug ? ($eval['base'] . '-' . $sel_group_slug) : $eval['base'];
                     $result = $wpdb->get_row($wpdb->prepare(
-                      "SELECT completion FROM {$results_table}
+                      "SELECT completion, status FROM {$results_table}
                         WHERE student_id = %d AND modul_type = 'sel' AND modul = %s
                         ORDER BY created_at DESC LIMIT 1",
                       $student->id, $full_slug
                     ));
                     $proc = $result ? intval($result->completion) : 0;
+                    $rstatus = $result ? (string)$result->status : '';
 
                     echo '<td class="px-2 py-3 text-center align-middle">';
-                    echo $render_eval_btn($eval['label'], $proc, 'sel', $full_slug, $student->id);
+                    echo $render_eval_btn($eval['label'], $proc, 'sel', $full_slug, $student->id, $rstatus);
                     echo '</td>';
                   }
 
@@ -666,15 +676,16 @@ function get_students_callback() {
                   ];
                   foreach ($lit_evals as $lit) {
                     $result = $wpdb->get_row($wpdb->prepare(
-                      "SELECT completion FROM {$results_table}
+                      "SELECT completion, status FROM {$results_table}
                         WHERE student_id = %d AND modul_type = 'lit' AND modul = %s
                         ORDER BY created_at DESC LIMIT 1",
                       $student->id, $lit['slug']
                     ));
                     $proc = $result ? intval($result->completion) : 0;
+                    $rstatus = $result ? (string)$result->status : '';
 
                     echo '<td class="px-2 py-3 text-center align-middle">';
-                    echo $render_eval_btn($lit['label'], $proc, 'lit', $lit['slug'], $student->id);
+                    echo $render_eval_btn($lit['label'], $proc, 'lit', $lit['slug'], $student->id, $rstatus);
                     echo '</td>';
                   }
                 ?>
@@ -898,7 +909,7 @@ function edu_get_student_edit_form() {
       </div>
     </div>
 
-    <form id="edus-edit-form-<?php echo (int)$student->id; ?>" class="grid gap-3 p-4 md:grid-cols-5" data-student-id="<?php echo (int)$student->id; ?>" data-level="<?php echo esc_attr($level_code); ?>">
+    <form id="edus-edit-form-<?php echo (int)$student->id; ?>" class="grid grid-cols-2 gap-3 p-4 md:grid-cols-4" data-student-id="<?php echo (int)$student->id; ?>" data-level="<?php echo esc_attr($level_code); ?>">
       <input type="hidden" name="action" value="edu_update_student">
       <input type="hidden" name="student_id" value="<?php echo (int)$student->id; ?>">
 
@@ -913,13 +924,13 @@ function edu_get_student_edit_form() {
       </label>
 
       <label class="grid gap-1 text-sm">
-        <span class="font-medium text-slate-700">Vârstă</span>
-        <input type="number" name="age" min="1" class="edus-inp" value="<?php echo $v($student->age); ?>">
+        <span class="font-medium text-slate-700">Vârstă *</span>
+        <input type="number" name="age" min="1" required class="edus-inp" value="<?php echo $v($student->age); ?>">
       </label>
 
       <label class="grid gap-1 text-sm">
-        <span class="font-medium text-slate-700">Gen</span>
-        <select name="gender" class="edus-inp">
+        <span class="font-medium text-slate-700">Gen *</span>
+        <select name="gender" required class="edus-inp">
           <option value=""></option>
           <option value="M" <?php selected($student->gender==='M'); ?>>M</option>
           <option value="F" <?php selected($student->gender==='F'); ?>>F</option>
@@ -927,18 +938,17 @@ function edu_get_student_edit_form() {
       </label>
 
       <label class="grid gap-1 text-sm">
-        <span class="font-medium text-slate-700">Clasa</span>
-        <!-- opțiunile se populează din JS via window.classOptions(level) -->
-        <select name="class_label" class="edus-inp edus-class-select" data-current="<?php echo $v($student->class_label); ?>"></select>
+        <span class="font-medium text-slate-700">Clasa *</span>
+        <select name="class_label" required class="edus-inp edus-class-select" data-current="<?php echo $v($student->class_label); ?>"></select>
       </label>
 
       <?php
       $sit_abs_val = (string)$student->sit_abs;
       $sit_abs_opts = [''=>'','Nu absentează deloc'=>'Nu absentează deloc','Absentează uneori/rar'=>'Absentează uneori/rar','Absentează des'=>'Absentează des','Absentează foarte des'=>'Absentează foarte des','Nu a venit niciodată'=>'Nu a venit niciodată'];
-      // Backwards compat: map old short values to new labels
       $sit_abs_map = ['Deloc'=>'Nu absentează deloc','Uneori/Rar'=>'Absentează uneori/rar','Des'=>'Absentează des','Foarte Des'=>'Absentează foarte des'];
       if (isset($sit_abs_map[$sit_abs_val])) $sit_abs_val = $sit_abs_map[$sit_abs_val];
       $show_abs_extra = in_array($sit_abs_val, ['Absentează des','Absentează foarte des','Nu a venit niciodată']);
+      $show_cauze     = ($sit_abs_val !== '' && $sit_abs_val !== 'Nu absentează deloc');
       ?>
 
       <label class="grid gap-1 text-sm">
@@ -980,20 +990,6 @@ function edu_get_student_edit_form() {
         </select>
       </label>
 
-      <label class="grid gap-1 text-sm cauze-abs-cell" style="<?php echo $show_abs_extra ? '' : 'display:none;'; ?>">
-        <span class="font-medium text-slate-700">Cauze absenteism</span>
-        <textarea name="cauze_abs" rows="2" class="edus-inp"><?php echo esc_textarea((string)($student->cauze_abs ?? '')); ?></textarea>
-      </label>
-
-      <label class="grid gap-1 text-sm risc-abandon-cell" style="<?php echo $show_abs_extra ? '' : 'display:none;'; ?>">
-        <span class="font-medium text-slate-700">Risc abandon</span>
-        <select name="risc_abandon" class="edus-inp">
-          <option value=""></option>
-          <option value="Da" <?php selected(($student->risc_abandon ?? '')==='Da'); ?>>Da</option>
-          <option value="Nu" <?php selected(($student->risc_abandon ?? '')==='Nu'); ?>>Nu</option>
-        </select>
-      </label>
-
       <label class="grid gap-1 text-sm">
         <span class="font-medium text-slate-700">Repetă clasa</span>
         <select name="repeta_clasa" class="edus-inp">
@@ -1014,46 +1010,57 @@ function edu_get_student_edit_form() {
         </select>
       </label>
 
-      <label class="grid gap-1 text-sm md:col-span-2">
+      <label class="grid gap-1 text-sm">
         <span class="font-medium text-slate-700">Alte observații</span>
         <textarea name="alte_obs" rows="2" class="edus-inp"><?php echo esc_textarea((string)($student->alte_obs ?? '')); ?></textarea>
       </label>
 
-      <?php
-      $demers_opts = [''=>'','Da'=>'Da','Nu'=>'Nu','Nu a fost cazul'=>'Nu a fost cazul'];
-      $demers_fields = [
-        'demers_familie' => 'Demers familie',
-        'demers_conducere' => 'Demers conducere',
-        'demers_consilier' => 'Demers consilier',
-      ];
-      foreach ($demers_fields as $dfield => $dlabel):
-        $dval = (string)($student->$dfield ?? '');
-      ?>
-      <label class="grid gap-1 text-sm demers-<?php echo str_replace('demers_','',$dfield); ?>-cell">
-        <?php if ($show_abs_extra): ?>
-          <span class="font-medium text-slate-700"><?php echo esc_html($dlabel); ?></span>
-          <select name="<?php echo esc_attr($dfield); ?>" class="edus-inp demers-select">
-            <?php foreach ($demers_opts as $dov=>$dol) {
-              printf('<option value="%s"%s>%s</option>', esc_attr($dov), selected($dval===$dov, true, false), esc_html($dol));
-            } ?>
-          </select>
-        <?php else: ?>
-          <span class="font-medium text-slate-700"><?php echo esc_html($dlabel); ?></span>
-          <span class="demers-na text-xs text-slate-400">Nu este cazul</span>
-          <select name="<?php echo esc_attr($dfield); ?>" class="edus-inp demers-select" style="display:none;">
-            <?php foreach ($demers_opts as $dov=>$dol) {
-              printf('<option value="%s"%s>%s</option>', esc_attr($dov), selected($dval===$dov, true, false), esc_html($dol));
-            } ?>
-          </select>
-        <?php endif; ?>
+      <!-- Conditional fields: hidden by default -->
+      <label class="grid gap-1 text-sm cauze-abs-cell" style="<?php echo $show_cauze ? '' : 'display:none;'; ?>">
+        <span class="font-medium text-slate-700">Cauze absenteism</span>
+        <textarea name="cauze_abs" rows="2" class="edus-inp"><?php echo esc_textarea((string)($student->cauze_abs ?? '')); ?></textarea>
       </label>
-      <?php endforeach; ?>
 
-      <label class="grid gap-1 text-sm md:col-span-2 edus-notes-wrap" style="<?php echo $obs !== '' ? '' : 'display:none;'; ?>">
+      <label class="grid gap-1 text-sm risc-abandon-cell<?php echo $show_abs_extra ? ' bg-rose-50 rounded-lg p-1' : ''; ?>" style="<?php echo $show_abs_extra ? '' : 'display:none;'; ?>">
+        <span class="font-medium text-slate-700">Risc abandon</span>
+        <select name="risc_abandon" class="edus-inp risc-abandon-select<?php echo $show_abs_extra ? ' !border-rose-400 !text-rose-700' : ''; ?>">
+          <option value=""></option>
+          <option value="Da" <?php selected(($student->risc_abandon ?? '')==='Da'); ?>>Da</option>
+          <option value="Nu" <?php selected(($student->risc_abandon ?? '')==='Nu'); ?>>Nu</option>
+        </select>
+      </label>
+
+      <label class="grid gap-1 text-sm edus-notes-wrap" style="<?php echo $obs !== '' ? '' : 'display:none;'; ?>">
         <span class="font-medium text-slate-700">Mențiuni</span>
         <textarea name="notes" rows="2" class="edus-inp"><?php echo esc_textarea((string)$student->notes); ?></textarea>
       </label>
     </form>
+
+    <!-- Demersuri section -->
+    <?php
+    $demers_opts = [''=>'','Da'=>'Da','Nu'=>'Nu','Nu a fost cazul'=>'Nu a fost cazul'];
+    $demers_fields_data = [
+      'demers_familie'   => ['label' => 'Am discutat cu familia',                  'val' => (string)($student->demers_familie ?? '')],
+      'demers_conducere' => ['label' => 'Am discutat cu conducerea școlii',        'val' => (string)($student->demers_conducere ?? '')],
+      'demers_consilier' => ['label' => 'Am apelat la consilier / mediator școlar','val' => (string)($student->demers_consilier ?? '')],
+    ];
+    ?>
+    <div class="px-3 pt-3 pb-2 mx-4 mt-0 mb-4 border-t rounded-lg demersuri-section border-amber-200 bg-amber-50/50" style="<?php echo $show_abs_extra ? '' : 'display:none;'; ?>"
+         data-form-id="edus-edit-form-<?php echo (int)$student->id; ?>">
+      <p class="mb-2 text-xs font-semibold text-amber-800">In caz de absenteism cronic, ce demersuri ați intreprins?</p>
+      <div class="grid grid-cols-3 gap-2">
+        <?php foreach ($demers_fields_data as $dfield => $dinfo): ?>
+        <div class="demers-<?php echo str_replace('demers_','',$dfield); ?>-cell">
+          <span class="text-xs font-medium text-slate-500"><?php echo esc_html($dinfo['label']); ?></span>
+          <select name="<?php echo esc_attr($dfield); ?>" form="edus-edit-form-<?php echo (int)$student->id; ?>" class="edus-inp demers-select" style="margin-top:2px;">
+            <?php foreach ($demers_opts as $dov=>$dol) {
+              printf('<option value="%s"%s>%s</option>', esc_attr($dov), selected($dinfo['val']===$dov, true, false), esc_html($dol));
+            } ?>
+          </select>
+        </div>
+        <?php endforeach; ?>
+      </div>
+    </div>
   </td>
   <style>
     .edus-inp{border:1px solid #cbd5e1;border-radius:.75rem;padding:.5rem .75rem;background:#fff;box-shadow:0 1px 1px rgba(0,0,0,.02)}
@@ -1115,31 +1122,44 @@ function edu_update_student() {
   }
   if ($in['age']!=='' && (int)$in['age'] < 1) $in['age'] = 1;
 
+  // Build update data dynamically based on existing columns
+  $existing_cols = array_flip($wpdb->get_col("SHOW COLUMNS FROM {$t['students']}"));
+
+  $update_data = [];
+  $update_fmt  = [];
+  $col_map = [
+    'first_name'       => ['val' => $in['first_name'],       'fmt' => '%s'],
+    'last_name'        => ['val' => $in['last_name'],        'fmt' => '%s'],
+    'age'              => ['val' => (int)$in['age'],         'fmt' => '%d'],
+    'gender'           => ['val' => $in['gender'],           'fmt' => '%s'],
+    'class_label'      => ['val' => $in['class_label'],      'fmt' => '%s'],
+    'sit_abs'          => ['val' => $in['sit_abs'],          'fmt' => '%s'],
+    'frecventa'        => ['val' => $in['frecventa'],        'fmt' => '%s'],
+    'bursa'            => ['val' => $in['bursa'],            'fmt' => '%s'],
+    'dif_limba'        => ['val' => $in['dif_limba'],        'fmt' => '%s'],
+    'cauze_abs'        => ['val' => $in['cauze_abs'],        'fmt' => '%s'],
+    'risc_abandon'     => ['val' => $in['risc_abandon'],     'fmt' => '%s'],
+    'repeta_clasa'     => ['val' => $in['repeta_clasa'],     'fmt' => '%s'],
+    'observation'      => ['val' => $in['observation'],      'fmt' => '%s'],
+    'alte_obs'         => ['val' => $in['alte_obs'],         'fmt' => '%s'],
+    'demers_familie'   => ['val' => $in['demers_familie'],   'fmt' => '%s'],
+    'demers_conducere' => ['val' => $in['demers_conducere'], 'fmt' => '%s'],
+    'demers_consilier' => ['val' => $in['demers_consilier'], 'fmt' => '%s'],
+    'notes'            => ['val' => $in['notes'],            'fmt' => '%s'],
+    'updated_at'       => ['val' => current_time('mysql'),   'fmt' => '%s'],
+  ];
+  foreach ($col_map as $col => $def) {
+    if (isset($existing_cols[$col])) {
+      $update_data[$col] = $def['val'];
+      $update_fmt[]      = $def['fmt'];
+    }
+  }
+
   $updated = $wpdb->update(
     $t['students'],
-    [
-      'first_name'       => $in['first_name'],
-      'last_name'        => $in['last_name'],
-      'age'              => (int)$in['age'],
-      'gender'           => $in['gender'],
-      'class_label'      => $in['class_label'],
-      'sit_abs'          => $in['sit_abs'],
-      'frecventa'        => $in['frecventa'],
-      'bursa'            => $in['bursa'],
-      'dif_limba'        => $in['dif_limba'],
-      'cauze_abs'        => $in['cauze_abs'],
-      'risc_abandon'     => $in['risc_abandon'],
-      'repeta_clasa'     => $in['repeta_clasa'],
-      'observation'      => $in['observation'],
-      'alte_obs'         => $in['alte_obs'],
-      'demers_familie'   => $in['demers_familie'],
-      'demers_conducere' => $in['demers_conducere'],
-      'demers_consilier' => $in['demers_consilier'],
-      'notes'            => $in['notes'],
-      'updated_at'       => current_time('mysql'),
-    ],
+    $update_data,
     [ 'id' => $student_id ],
-    [ '%s','%s','%d','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s' ],
+    $update_fmt,
     [ '%d' ]
   );
 
@@ -1151,13 +1171,34 @@ function edu_update_student() {
 }
 
 
+/**
+ * Map SEL modul slug to the correct ACF field group key based on level suffix.
+ * Slug format: sel-{stage}-{level}, e.g. sel-t0-primar-mic, sel-ti-gimnaziu
+ */
+function edus_sel_acf_group_key($modul_slug) {
+  $level_groups = [
+    'primar-mic'  => 'group_6890d7e176dbc',
+    'primar-mare' => 'group_68950d737ff62',
+    'prescolar'   => 'group_68950e502607b',
+    'gimnaziu'    => 'group_68951177472d5',
+    'gimnazial'   => 'group_68951177472d5',
+  ];
+  // Try longest suffix first to avoid "primar" matching before "primar-mic"
+  foreach ($level_groups as $suffix => $key) {
+    if (substr($modul_slug, -strlen($suffix)) === $suffix) {
+      return $key;
+    }
+  }
+  // Fallback to primar-mic
+  return 'group_6890d7e176dbc';
+}
+
 add_action('wp_ajax_load_questionnaire_form', 'load_questionnaire_form_callback');
 function load_questionnaire_form_callback() {
   $student_id = intval($_POST['student_id']);
   $modul_type   = sanitize_text_field($_POST['modul_type']);
   $modul_slug = sanitize_text_field($_POST['modul']);
-  $modul_id = 268;
-  $acf_group_key = 'group_6890d7e176dbc';
+  $acf_group_key = edus_sel_acf_group_key($modul_slug);
 
   global $wpdb;
   $table = $wpdb->prefix . 'edu_results';
@@ -1281,7 +1322,8 @@ function save_questionnaire_callback() {
     }
   }
 
-  $fields = acf_get_fields('group_6890d7e176dbc');
+  $acf_group_key = edus_sel_acf_group_key($modul_slug);
+  $fields = acf_get_fields($acf_group_key);
   $total_questions = 0;
   $answered_questions = 0;
 
@@ -3504,6 +3546,33 @@ add_action('wp_ajax_edu_search_teachers', function(){
   wp_send_json($out);
 });
 
+/* ── Check if email already exists (for add/edit teacher modal) ── */
+add_action('wp_ajax_edu_check_email', function(){
+  check_ajax_referer('edu_nonce', 'nonce');
+
+  if ( ! current_user_can('manage_options') ) {
+    $u = wp_get_current_user();
+    if ( ! in_array('tutor', (array)$u->roles, true) ) {
+      wp_send_json_error(['message' => 'Permisiuni insuficiente.']);
+    }
+  }
+
+  $email   = sanitize_email($_POST['email'] ?? '');
+  $user_id = intval($_POST['user_id'] ?? 0);
+
+  if ( ! is_email($email) ) {
+    wp_send_json_error(['message' => 'Adresa de email nu este validă.']);
+  }
+
+  $existing = get_user_by('email', $email);
+
+  if ( $existing && ( ! $user_id || (int)$existing->ID !== $user_id ) ) {
+    wp_send_json_error(['message' => 'Acest email există deja în sistem.']);
+  }
+
+  wp_send_json_success(['message' => 'Email disponibil.']);
+});
+
 
 if (!function_exists('es_send_csv')) {
   /**
@@ -3780,8 +3849,13 @@ add_action('wp_ajax_edu_create_generation', function () {
     wp_send_json_error(['message'=>'Profesorul nu are setat un nivel valid.'], 400);
   }
 
-  // An generație = anul curent (ex: 2025)
-  $year = (string) date('Y', current_time('timestamp'));
+  // An școlar — din dropdown (ex: 2025-2026); fallback: auto
+  $year = isset($_POST['year']) ? sanitize_text_field(wp_unslash($_POST['year'])) : '';
+  if ($year === '' || !preg_match('/^\d{4}-\d{4}$/', $year)) {
+    $y = (int) date('Y', current_time('timestamp'));
+    $m = (int) date('n', current_time('timestamp'));
+    $year = ($m >= 8) ? "{$y}-".($y+1) : ($y-1)."-{$y}";
+  }
 
   // Opțional: clasa selectată + lista claselor disponibile
   $class_label = isset($_POST['class_label']) ? sanitize_text_field( wp_unslash($_POST['class_label']) ) : '';

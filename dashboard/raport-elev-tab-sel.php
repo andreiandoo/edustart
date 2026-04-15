@@ -185,6 +185,6 @@
     </table>
   </div>
   <p class="px-4 py-2 text-xs text-gray-500">
-    Mediile generației sunt calculate dinamic pe fiecare etapă (T0/Ti/T1) și pe ansamblu, pentru toți elevii din aceeași generație.
+    Mediile generației/clasei sunt calculate dinamic pe fiecare etapă (T0/Ti/T1) și pe ansamblu, pentru toți elevii din aceeași generație/clasă.
   </p>
 </section>

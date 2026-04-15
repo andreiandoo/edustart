@@ -126,7 +126,7 @@ $base_url = esc_url(add_query_arg($qs, remove_query_arg(['paged','export'])));
     <div class="flex items-center justify-start">
       <!-- === NEW: GEN MODAL & BUTTON === -->
       <button id="es-open-add-gen" type="button"
-        class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white rounded-md bg-indigo-600 hover:bg-indigo-700">
+        class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md rounded-tl-xl hover:bg-indigo-700">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1 1 0 0 1 1 1v8h8a1 1 0 1 1 0 2h-8v8a1 1 0 1 1-2 0v-8H3a1 1 0 1 1 0-2h8V3a1 1 0 0 1 1-1Z"/></svg>
         Generație
       </button>
@@ -172,8 +172,8 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
                   class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
           </div>
           <div class="md:col-span-2">
-          <label class="block mb-1 text-xs font-medium text-slate-600">An</label>
-          <select name="year" id="gen-filter-year" class="gen-filter-select w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
+          <label class="block mb-1 text-xs font-medium text-slate-600">An școlar</label>
+          <select name="year" id="gen-filter-year" class="w-full px-3 py-2 text-sm bg-white border shadow-sm gen-filter-select rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
               <option value="">— Oricare —</option>
               <?php foreach ($years as $yr): ?>
               <option value="<?php echo esc_attr($yr); ?>" <?php selected($year_f===$yr); ?>><?php echo esc_html($yr); ?></option>
@@ -182,7 +182,7 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
           </div>
           <div class="md:col-span-2">
           <label class="block mb-1 text-xs font-medium text-slate-600">Nivel</label>
-          <select name="level" id="gen-filter-level" class="gen-filter-select w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
+          <select name="level" id="gen-filter-level" class="w-full px-3 py-2 text-sm bg-white border shadow-sm gen-filter-select rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
               <option value="">— Oricare —</option>
               <?php foreach ($levels as $lv): ?>
               <option value="<?php echo esc_attr($lv); ?>" <?php selected(strtolower($level_f)===strtolower($lv)); ?>><?php echo esc_html($lv); ?></option>
@@ -193,13 +193,13 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
           <label class="block mb-1 text-xs font-medium text-slate-600">Tutor ID</label>
           <input type="number" name="tutor_id" id="gen-filter-tutor" value="<?php echo (int)$tutor_id ?: ''; ?>"
                   placeholder="ID tutor"
-                  class="gen-filter-input w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
+                  class="w-full px-3 py-2 text-sm bg-white border shadow-sm gen-filter-input rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
           </div>
           <div class="md:col-span-2">
           <label class="block mb-1 text-xs font-medium text-slate-600">Profesor ID</label>
           <input type="number" name="professor_id" id="gen-filter-prof" value="<?php echo (int)$prof_id ?: ''; ?>"
                   placeholder="ID profesor"
-                  class="gen-filter-input w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
+                  class="w-full px-3 py-2 text-sm bg-white border shadow-sm gen-filter-input rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
           </div>
           <div class="flex items-end gap-2 md:col-span-1">
           <button type="submit" class="inline-flex items-center justify-center w-full gap-2 px-3 py-2 text-sm font-semibold text-white shadow-sm bg-emerald-600 rounded-xl hover:bg-emerald-700">
@@ -231,10 +231,10 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
         </div>
     <?php else: ?>
 
-    <div class="mb-3 flex flex-wrap items-center justify-between gap-2 bg-white border border-slate-200 rounded-2xl px-3 py-2">
+    <div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 mb-3 bg-white border border-slate-200 rounded-2xl">
         <div class="flex items-center gap-3">
             <label class="inline-flex items-center gap-2 text-sm text-slate-700">
-            <input type="checkbox" id="gen-select-all" class="size-4 rounded border-slate-300">
+            <input type="checkbox" id="gen-select-all" class="rounded size-4 border-slate-300">
             Selectează toate
             </label>
             <span class="text-slate-300">|</span>
@@ -301,45 +301,49 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
             ]);
             ?>
 
-            <div class="gen-card w-full overflow-hidden bg-white border rounded-2xl ring-1 ring-black/5 border-slate-200"
+            <div class="w-full overflow-hidden bg-white border gen-card rounded-2xl ring-1 ring-black/5 border-slate-200"
                  data-search="<?php echo esc_attr($search_blob); ?>"
                  data-year="<?php echo esc_attr($c['gyear']); ?>"
                  data-level="<?php echo esc_attr($c['glevel']); ?>"
                  data-tutor="<?php echo (int)$c['tid']; ?>"
                  data-prof="<?php echo (int)$c['pid']; ?>">
-            <div class="flex flex-col p-4 gap-y-2 md:p-5">
+            <div class="flex flex-col p-4 gap-y-2">
                 <!-- HEADER: generație/profesor/tutor + status -->
                 <div class="flex flex-wrap items-center justify-between gap-3">
-                    <div class="shrink-0">
-                        <input type="checkbox" class="gen-select size-4 rounded border-slate-300" data-gid="<?php echo (int)$c['gid']; ?>">
-                    </div>
                     <div class="flex items-center min-w-0 gap-x-4">
-                        <div class="flex flex-wrap items-center gap-2">
+                      <div class="shrink-0">
+                        <input type="checkbox" class="rounded gen-select size-4 border-slate-300" data-gid="<?php echo (int)$c['gid']; ?>">
+                      </div>
+                      <div class="flex flex-wrap items-center gap-2">
                         <a href="<?php echo esc_url($gen_url); ?>" class="flex items-center text-base font-semibold tracking-tight gap-x-2 text-slate-900 hover:text-emerald-700">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="size-4" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M19.902 4.098a3.75 3.75 0 0 0-5.304 0l-4.5 4.5a3.75 3.75 0 0 0 1.035 6.037.75.75 0 0 1-.646 1.353 5.25 5.25 0 0 1-1.449-8.45l4.5-4.5a5.25 5.25 0 1 1 7.424 7.424l-1.757 1.757a.75.75 0 1 1-1.06-1.06l1.757-1.757a3.75 3.75 0 0 0 0-5.304Zm-7.389 4.267a.75.75 0 0 1 1-.353 5.25 5.25 0 0 1 1.449 8.45l-4.5 4.5a5.25 5.25 0 1 1-7.424-7.424l1.757-1.757a.75.75 0 1 1 1.06 1.06l-1.757 1.757a3.75 3.75 0 1 0 5.304 5.304l4.5-4.5a3.75 3.75 0 0 0-1.035-6.037.75.75 0 0 1-.354-1Z" clip-rule="evenodd"/></svg>
                             <?php echo esc_html($c['gname']); ?>
                         </a>
-                        <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-slate-700 ring-1 ring-inset ring-slate-200"><?php echo esc_html($c['gyear']); ?></span>
-                        <span class="rounded-full bg-white px-2.5 py-0.5 text-slate-700 ring-1 ring-inset ring-slate-200"><?php echo esc_html($c['glevel']); ?></span>
+                        <div class="">
+                          <span class="px-3 py-1 text-sm rounded-full bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200"><?php echo esc_html($c['gyear']); ?> - Ciclu <?php echo esc_html($c['glevel']); ?> - <b><?php echo (int)$c['students_count']; ?> elevi</b></span>
                         </div>
-                        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-600">
+                        <a href="<?php echo esc_url( home_url('/panou/raport/generatie/'.(int)$c['gid']) ); ?>"
+                        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-emerald-700 rounded-full shadow-sm bg-emerald-50 hover:bg-emerald-100 ring-1 ring-emerald-200">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-4">
+                            <path fill-rule="evenodd" d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0 0 16.5 9h-1.875a1.875 1.875 0  0 1-1.875-1.875V5.25A3.75 3.75 0  0 0 9 1.5H5.625ZM7.5 15a.75.75 0  0 1 .75-.75h7.5a.75.75 0  0 1 0 1.5h-7.5A.75.75 0  0 1 7.5 15Zm.75 2.25a.75.75 0  0 0 0 1.5H12a.75.75 0  0 0 0-1.5H8.25Z" clip-rule="evenodd" />
+                            <path d="M12.971 1.816A5.23 5.23 0  0 1 14.25 5.25v1.875c0 .207.168.375.375.375H16.5a5.23 5.23 0  0 1 3.434 1.279 9.768 9.768 0  0 0-6.963-6.963Z" />
+                          </svg>
+                          Raport
+                      </a>
+                      </div>
+                      <div class="flex flex-wrap items-center text-sm gap-x-4 gap-y-1 text-slate-600">
                         <span class="inline-flex items-center gap-1.5">
-                            <svg class="size-4 text-slate-600" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-5.33 0-8 2.667-8 6a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1c0-3.333-2.67-6-8-6Z"/></svg>
+                            Profesor: 
                             <a href="<?php echo esc_url($prof_url); ?>" class="font-medium text-slate-800 hover:text-emerald-700"><?php echo esc_html($c['prof_name']); ?></a>
                         </span>
                         <span class="inline-flex items-center gap-1.5">
-                            <svg class="size-4 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 6v12"/><path d="M6 12h12"/></svg>
+                            Tutor: 
                             <?php if ($tutor_url): ?>
-                            <a href="<?php echo esc_url($tutor_url); ?>" class="font-medium text-emerald-700 hover:text-emerald-800"><?php echo esc_html($c['tutor_name']); ?></a>
+                              <a href="<?php echo esc_url($tutor_url); ?>" class="font-medium text-slate-800 hover:text-emerald-700"><?php echo esc_html($c['tutor_name']); ?></a>
                             <?php else: ?>
-                            <span class="text-slate-500">—</span>
+                              <span class="text-slate-500">—</span>
                             <?php endif; ?>
                         </span>
-                        <span class="inline-flex items-center gap-1.5">
-                            <svg class="size-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                            Elevi <b><?php echo (int)$c['students_count']; ?></b>
-                        </span>
-                        </div>
+                      </div>
                     </div>
                     <div class="flex items-center gap-1.5">
                         <?php echo $chip_total.$chip_draft.$chip_final; ?>
@@ -347,7 +351,7 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
                 </div>
 
                 <!-- BODY: SEL | LIT (identic cu pagina de tutor) -->
-                <div class="flex flex-row items-center justify-between gap-x-4">
+                <div class="flex flex-row items-center justify-start gap-x-4">
 
                 <!-- SEL -->
                 <div class="flex items-center gap-x-4">
@@ -427,7 +431,7 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
                     ];
                 ?>
                 <div class="mt-2 flex flex-wrap items-center gap-1.5">
-                    <span class="text-xs text-slate-500 mr-1">Module:</span>
+                    <span class="mr-1 text-xs text-slate-500">Module:</span>
                     <?php foreach ($modules as $key => $label):
                         $on  = !empty($flags[$key]);
                         $cls = $on
@@ -444,29 +448,6 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
                         </button>
                     <?php endforeach; ?>
                 </div>
-
-
-                <!-- Actiuni -->
-                <div class="flex flex-wrap items-center justify-end gap-2 pt-2">
-                    <a href="<?php echo esc_url($gen_url); ?>"
-                        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-white rounded-full shadow-sm bg-emerald-600 hover:bg-emerald-700">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M3 6h18v2H3zM3 10h18v2H3zM3 14h12v2H3z"/></svg>
-                        Deschide
-                    </a>
-                    <a href="<?php echo esc_url( home_url('/panou/raport/generatie/'.(int)$c['gid']) ); ?>"
-                        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-emerald-700 rounded-full shadow-sm bg-emerald-50 hover:bg-emerald-100 ring-1 ring-emerald-200">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 4h18M3 10h18M3 16h18"/><path d="M8 4v16"/></svg>
-                        Raport
-                    </a>
-                    <?php if ($tutor_url): ?>
-                        <a href="<?php echo esc_url($tutor_url); ?>"
-                        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-emerald-700 rounded-full shadow-sm bg-emerald-50 hover:bg-emerald-100 ring-1 ring-emerald-200">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-5.33 0-8 2.667-8 6a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1c0-3.333-2.67-6-8-6Z"/></svg>
-                        Profil Tutor
-                        </a>
-                    <?php endif; ?>
-                </div>
-
             </div>
             </div>
         <?php endforeach; ?>
@@ -527,7 +508,7 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
           <!-- Nivel (derivat) -->
           <div>
             <label class="block mb-1 text-xs font-medium text-slate-600">Nivel (derivat din profesor)</label>
-            <div class="px-3 py-2 text-sm bg-slate-50 border rounded-xl border-slate-200 text-slate-800" id="es-gen-level-ro">—</div>
+            <div class="px-3 py-2 text-sm border bg-slate-50 rounded-xl border-slate-200 text-slate-800" id="es-gen-level-ro">—</div>
           </div>
 
           <!-- Clase disponibile -->
@@ -543,18 +524,17 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
                    required class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
           </div>
 
-          <!-- An (auto) -->
+          <!-- An școlar (dropdown: anul curent + următorii 2) -->
           <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">An (auto)</label>
-            <input id="es-gen-year-display" type="text" disabled
-                   class="w-full px-3 py-2 text-sm bg-slate-50 border rounded-xl border-slate-200">
-            <p class="mt-1 text-xs text-slate-500">Se auto-completează cu anul școlar curent; salvat pe server.</p>
+            <label class="block mb-1 text-xs font-medium text-slate-600">An școlar</label>
+            <select id="es-gen-year-display" class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+            </select>
           </div>
         </div>
 
         <div class="flex items-center justify-end gap-2 pt-5 mt-5 border-t border-slate-200">
           <button type="button" id="es-cancel-gen" class="px-3 py-2 text-sm bg-white border rounded-xl hover:bg-slate-50 border-slate-300">Anulează</button>
-          <button id="es-submit-gen" type="submit" class="px-3 py-2 text-sm text-white rounded-xl bg-indigo-600 hover:bg-indigo-700">
+          <button id="es-submit-gen" type="submit" class="px-3 py-2 text-sm text-white bg-indigo-600 rounded-xl hover:bg-indigo-700">
             Salvează generația
           </button>
         </div>
@@ -642,14 +622,15 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
 
   // — Selecție în masă
   const selectAll = $('#gen-select-all');
+  const visibleGenChecks = () => $$('.gen-select').filter(cb => cb.closest('.gen-card')?.style.display !== 'none');
   const updateBulkCount = () => {
-    const n = $$('.gen-select:checked').length;
+    const n = $$('.gen-select:checked').filter(cb => cb.closest('.gen-card')?.style.display !== 'none').length;
     const bc = $('#bulk-count');
     if (bc) bc.textContent = n + ' selectate';
   };
   if (selectAll) {
     selectAll.addEventListener('change', function(){
-      $$('.gen-select').forEach(cb => { cb.checked = selectAll.checked; });
+      visibleGenChecks().forEach(cb => { cb.checked = selectAll.checked; });
       updateBulkCount();
     });
   }
@@ -659,7 +640,7 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
 
   // — Bulk activate/deactivate
   function bulkSet(val){
-    const ids = $$('.gen-select:checked').map(cb => cb.dataset.gid);
+    const ids = $$('.gen-select:checked').filter(cb => cb.closest('.gen-card')?.style.display !== 'none').map(cb => cb.dataset.gid);
     if (!ids.length) { edusToast('Selectează cel puțin o generație.', 'err', 1800); return; }
     const module = $('#bulk-module')?.value || 'sel_t0';
 
@@ -722,11 +703,31 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
     const y = d.getFullYear(), m = d.getMonth() + 1; // 1..12
     return (m >= 8) ? `${y}-${y+1}` : `${y-1}-${y}`;
   }
-  function setYearAuto(){
-    const y = computeAcademicYearStr();
-    if (genYearDisp) genYearDisp.value = y;
-    if (genYearHid)  genYearHid.value  = y;
+  function getAcademicYearOptions(){
+    const d = new Date();
+    const y = d.getFullYear(), m = d.getMonth() + 1;
+    const baseYear = (m >= 8) ? y : y - 1;
+    return [
+      `${baseYear}-${baseYear+1}`,
+      `${baseYear+1}-${baseYear+2}`,
+      `${baseYear+2}-${baseYear+3}`,
+    ];
   }
+  function populateYearDropdown(selectedValue){
+    if (!genYearDisp) return;
+    const opts = getAcademicYearOptions();
+    const sel = selectedValue || opts[0];
+    genYearDisp.innerHTML = opts.map(o =>
+      `<option value="${o}" ${o === sel ? 'selected' : ''}>${o}</option>`
+    ).join('');
+    if (genYearHid) genYearHid.value = genYearDisp.value;
+  }
+  function setYearAuto(){
+    populateYearDropdown();
+  }
+  if (genYearDisp) genYearDisp.addEventListener('change', () => {
+    if (genYearHid) genYearHid.value = genYearDisp.value;
+  });
   function renderLevelAndClasses(code){
     const label = LEVEL_LABEL[code] || '—';
     genLevelRO.textContent = label;
@@ -752,8 +753,7 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
       if (data && data.success && data.data) {
         renderLevelAndClasses(data.data.level_code || '');
         const sy = (data.data.year || computeAcademicYearStr());
-        if (genYearDisp) genYearDisp.value = sy;
-        if (genYearHid)  genYearHid.value  = sy;
+        populateYearDropdown(sy);
       } else {
         renderLevelAndClasses('');
       }
@@ -803,8 +803,8 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
       fetchProfessorLevel(pid);
       lockProfessorUI(true,
         pname
-          ? `<span class="px-2 py-1 rounded bg-indigo-50 text-indigo-800 ring-1 ring-indigo-200">Profesor: ${escapeHtml(pname)} (#${pid})</span>`
-          : `<span class="px-2 py-1 rounded bg-indigo-50 text-indigo-800 ring-1 ring-indigo-200">Profesor selectat: #${pid}</span>`
+          ? `<span class="px-2 py-1 text-indigo-800 rounded bg-indigo-50 ring-1 ring-indigo-200">Profesor: ${escapeHtml(pname)} (#${pid})</span>`
+          : `<span class="px-2 py-1 text-indigo-800 rounded bg-indigo-50 ring-1 ring-indigo-200">Profesor selectat: #${pid}</span>`
       );
       genTitleEl.textContent = 'Alocă generație';
       genModal.classList.remove('hidden');
@@ -849,7 +849,7 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
         b.addEventListener('click', ()=>{
           const pid = b.getAttribute('data-id') || '';
           genProfId.value = pid;
-          genProfSelected.innerHTML = `<span class="px-2 py-1 rounded bg-indigo-50 text-indigo-800 ring-1 ring-indigo-200">Profesor selectat: ${escapeHtml(b.textContent)} (#${pid})</span>`;
+          genProfSelected.innerHTML = `<span class="px-2 py-1 text-indigo-800 rounded bg-indigo-50 ring-1 ring-indigo-200">Profesor selectat: ${escapeHtml(b.textContent)} (#${pid})</span>`;
           genProfSuggest.classList.add('hidden'); genProfSuggest.innerHTML='';
           fetchProfessorLevel(pid);
         });

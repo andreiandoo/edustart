@@ -40,7 +40,7 @@ $gen_id = (int)(
 if ($gen_id <= 0) {
   get_header(); ?>
   <main class="wrap" style="max-width:1100px;margin:40px auto;">
-    <div class="p-4 text-red-800 bg-red-100 rounded">Lipsește ID-ul generației în URL.</div>
+    <div class="p-4 text-red-800 bg-red-100 rounded">Lipsește ID-ul generației/clasei în URL.</div>
   </main>
   <?php get_footer(); return;
 }
@@ -81,7 +81,7 @@ if (!$can_view) {
   get_header(); ?>
   <main class="wrap" style="max-width:1100px;margin:40px auto;">
     <div class="p-4 text-red-800 bg-red-100 rounded">
-      Acces interzis: generația #<?php echo (int)$gen_id; ?> nu aparține unui profesor alocat ție.
+      Acces interzis: generația/clasa #<?php echo (int)$gen_id; ?> nu aparține unui profesor alocat ție.
     </div>
   </main>
   <?php get_footer(); return;

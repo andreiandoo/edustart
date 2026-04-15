@@ -90,14 +90,53 @@ if ($can_manage && !empty($_POST['school_action']) && $_POST['school_action'] ==
 }
 
 /* Filtre inițiale (NU le mai folosim pentru GET — doar pentru preselectare UI) */
-$s_init      = '';
-$county_init = 0;
-$city_init   = 0;
+$s_init      = sanitize_text_field($_GET['s'] ?? '');
+$county_init = (int)($_GET['county'] ?? 0);
+$city_init   = (int)($_GET['city'] ?? 0);
 
 /* Dropdown județe + (opțional) orașe preîncărcate dacă vrei tu server-side */
 $counties = $wpdb->get_results("SELECT id,name FROM {$tbl_counties} ORDER BY name");
 
-/* Listă școli pentru tabel (încarcă un set rezonabil) */
+/* Paginare server-side */
+$per_page = 100;
+$paged    = max(1, (int)($_GET['pg'] ?? 1));
+$offset   = ($paged - 1) * $per_page;
+
+/* Condiții WHERE pentru filtru server-side */
+$where = [];
+$prepare_args = [];
+if ($s_init !== '') {
+  $like = '%' . $wpdb->esc_like($s_init) . '%';
+  $where[] = "(s.name LIKE %s OR s.short_name LIKE %s OR s.cod LIKE %s OR c.name LIKE %s OR ct.name LIKE %s)";
+  $prepare_args = array_merge($prepare_args, [$like, $like, $like, $like, $like]);
+}
+if ($county_init > 0) {
+  $where[] = "ct.id = %d";
+  $prepare_args[] = $county_init;
+}
+if ($city_init > 0) {
+  $where[] = "c.id = %d";
+  $prepare_args[] = $city_init;
+}
+$where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+/* Total pentru paginare */
+$count_sql = "
+  SELECT COUNT(*)
+  FROM {$tbl_schools} s
+  JOIN {$tbl_cities} c   ON s.city_id = c.id
+  JOIN {$tbl_counties} ct ON c.county_id = ct.id
+  {$where_sql}
+";
+$total_schools = (int)($prepare_args
+  ? $wpdb->get_var($wpdb->prepare($count_sql, ...$prepare_args))
+  : $wpdb->get_var($count_sql)
+);
+$total_pages = max(1, (int)ceil($total_schools / $per_page));
+$paged = min($paged, $total_pages);
+$offset = ($paged - 1) * $per_page;
+
+/* Listă școli pentru tabel */
 $sql = "
   SELECT s.*,
          c.name  AS city_name,
@@ -110,10 +149,13 @@ $sql = "
   JOIN {$tbl_cities} c   ON s.city_id = c.id
   JOIN {$tbl_counties} ct ON c.county_id = ct.id
   LEFT JOIN {$tbl_cities} v ON s.village_id = v.id
+  {$where_sql}
   ORDER BY ct.name, c.name, s.name
-  LIMIT 1000
+  LIMIT {$per_page} OFFSET {$offset}
 ";
-$rows = $wpdb->get_results($sql);
+$rows = $prepare_args
+  ? $wpdb->get_results($wpdb->prepare($sql, ...$prepare_args))
+  : $wpdb->get_results($sql);
 
 
 $export_base = add_query_arg([
@@ -171,12 +213,13 @@ $export_base = add_query_arg([
 
     <!-- FILTRE -->
     <section class="mb-6">
-      <form @submit.prevent="filterRows" class="grid items-end grid-cols-1 gap-3 md:grid-cols-12">
+      <form id="schools-filter-form" method="get" class="grid items-end grid-cols-1 gap-3 md:grid-cols-12">
         <!-- Căutare (AJAX sugestii) -->
         <div class="relative md:col-span-4">
           <label class="block mb-1 text-xs font-medium text-slate-600">Caută școală (nume/cod)</label>
-          <input type="text" x-model.trim="s" @input="onSearchInput(); filterRows()" @keydown.escape="showSuggest=false"
+          <input type="text" name="s" x-model.trim="s" @input="onSearchInput()" @keydown.escape="showSuggest=false"
                  autocomplete="off" placeholder="Ex: Școala Gimnazială …"
+                 value="<?php echo esc_attr($s_init); ?>"
                  class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-600 focuse:border-transparent focus:outline-none">
           <!-- Panel sugestii -->
           <div x-show="showSuggest" x-transition
@@ -186,7 +229,7 @@ $export_base = add_query_arg([
             </template>
             <template x-for="it in suggestions" :key="it.id">
               <button type="button"
-                      @click="s = it.name || ''; showSuggest = false; filterRows()"
+                      @click="s = it.name || ''; showSuggest = false; $refs.filterForm?.submit()"
                       class="flex items-center justify-between w-full px-3 py-1.5 text-left rounded hover:bg-slate-50">
                 <span class="text-sm" x-text="it.text"></span>
               </button>
@@ -197,11 +240,11 @@ $export_base = add_query_arg([
         <!-- Județ -->
         <div class="md:col-span-2">
           <label class="block mb-1 text-xs font-medium text-slate-600">Județ</label>
-          <select x-model.number="county" @change="onCountyChange()"
+          <select name="county" x-model.number="county" @change="onCountyChange()"
                   class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-600 focus:border-transparent focus:outline-none">
             <option value="0">— Toate județele —</option>
             <?php foreach ($counties as $c): ?>
-              <option value="<?php echo (int)$c->id; ?>"><?php echo esc_html($c->name); ?></option>
+              <option value="<?php echo (int)$c->id; ?>" <?php selected($county_init, (int)$c->id); ?>><?php echo esc_html($c->name); ?></option>
             <?php endforeach; ?>
           </select>
         </div>
@@ -209,7 +252,7 @@ $export_base = add_query_arg([
         <!-- Oraș (dependent) -->
         <div class="md:col-span-2" x-show="county>0" x-transition>
           <label class="block mb-1 text-xs font-medium text-slate-600">Oraș</label>
-          <select x-model.number="city" x-ref="filterCity" @change="filterRows"
+          <select name="city" x-model.number="city" x-ref="filterCity"
                   class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-600 focus:border-transparent focus:outline-none">
             <option value="0">— Toate orașele —</option>
           </select>
@@ -217,25 +260,27 @@ $export_base = add_query_arg([
 
         <!-- Submit -->
         <div class="flex items-center gap-2 md:col-span-4">
-          <button type="button" @click="filterRows"
+          <button type="submit"
                   class="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-white rounded-md shadow-sm bg-emerald-600 hover:bg-emerald-700">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4">
                     <path fill-rule="evenodd" d="M3.792 2.938A49.069 49.069 0 0 1 12 2.25c2.797 0 5.54.236 8.209.688a1.857 1.857 0 0 1 1.541 1.836v1.044a3 3 0 0 1-.879 2.121l-6.182 6.182a1.5 1.5 0 0 0-.439 1.061v2.927a3 3 0 0 1-1.658 2.684l-1.757.878A.75.75 0 0 1 9.75 21v-5.818a1.5 1.5 0 0 0-.44-1.06L3.13 7.938a3 3 0 0 1-.879-2.121V4.774c0-.897.64-1.683 1.542-1.836Z" clip-rule="evenodd" />
                 </svg>
             Aplică filtre
           </button>
-          <button type="button" @click="resetFilters"
-                  class="inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-white rounded-md shadow-sm bg-rose-500 hover:bg-rose-600">
+          <a href="<?php echo esc_url(strtok($_SERVER['REQUEST_URI'], '?')); ?>"
+             class="inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-white rounded-md shadow-sm bg-rose-500 hover:bg-rose-600">
             Reset
-          </button>
-          <span class="ml-auto text-xs text-slate-600" x-text="visibleCountLabel"></span>
+          </a>
+          <span class="ml-auto text-xs text-slate-600">
+            Afișezi <?php echo count($rows); ?> din <?php echo $total_schools; ?> școli
+          </span>
         </div>
       </form>
     </section>
 
     <!-- TABEL -->
-    <div class="relative min-h-screen overflow-x-auto bg-white border shadow-sm rounded-2xl border-slate-200">
-      <table class="relative w-full text-sm table-auto" id="schools-table">
+    <div class="relative overflow-x-auto bg-white border shadow-sm min-h-auto rounded-2xl border-slate-200">
+      <table class="relative w-full text-sm table-auto max-h-[62vh] overflow-y-scroll block" id="schools-table">
         <thead class="sticky top-0 bg-sky-800 backdrop-blur">
           <tr class="text-white">
             <th class="px-3 py-2 font-semibold text-left border-b">ID</th>
@@ -314,7 +359,7 @@ $export_base = add_query_arg([
               <?php endif; ?>
             </td>
             <td class="px-3 py-2"><?php echo $r->regiune_tfr ? esc_html($r->regiune_tfr) : '—'; ?></td>
-            <td class="px-3 py-2"><?php echo $r->statut ? esc_html($r->statut) : '—'; ?></td>
+            <td class="px-3 py-2 text-xs"><?php echo $r->statut ? esc_html($r->statut) : '—'; ?></td>
             <td class="px-3 py-2"><?php echo ($r->tip ?? '') ? esc_html($r->tip) : '—'; ?></td>
             <td class="px-3 py-2"><?php echo ($r->first_year_tfr ?? '') ? esc_html($r->first_year_tfr) : '—'; ?></td>
             <td class="px-3 py-2"><?php echo ($r->index_vulnerabilitate_tfr ?? '') !== '' && $r->index_vulnerabilitate_tfr !== null ? esc_html($r->index_vulnerabilitate_tfr) : '—'; ?></td>
@@ -328,7 +373,11 @@ $export_base = add_query_arg([
                         class="px-2 py-1 text-xs font-medium rounded bg-slate-100 hover:bg-slate-200">Editează</button>
                 <a href="<?php echo $del_url; ?>"
                    onclick="return confirm('Sigur dorești să ștergi această școală?');"
-                   class="px-2 py-1 text-xs font-medium text-white rounded bg-rose-600 hover:bg-rose-700">Șterge</a>
+                   class="px-2 py-1 text-xs font-medium rounded text-rose-600 hover:text-rose-700">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-4">
+                    <path fill-rule="evenodd" d="M16.5 4.478v.227a48.816 48.816 0 0 1 3.878.512.75.75 0 1 1-.256 1.478l-.209-.035-1.005 13.07a3 3 0 0 1-2.991 2.77H8.084a3 3 0 0 1-2.991-2.77L4.087 6.66l-.209.035a.75.75 0 0 1-.256-1.478A48.567 48.567 0 0 1 7.5 4.705v-.227c0-1.564 1.213-2.9 2.816-2.951a52.662 52.662 0 0 1 3.369 0c1.603.051 2.815 1.387 2.815 2.951Zm-6.136-1.452a51.196 51.196 0 0 1 3.273 0C14.39 3.05 15 3.684 15 4.478v.113a49.488 49.488 0 0 0-6 0v-.113c0-.794.609-1.428 1.364-1.452Zm-.355 5.945a.75.75 0 1 0-1.5.058l.347 9a.75.75 0 1 0 1.499-.058l-.346-9Zm5.48.058a.75.75 0 1 0-1.498-.058l-.347 9a.75.75 0 0 0 1.5.058l.345-9Z" clip-rule="evenodd" />
+                  </svg>
+                </a>
               </div>
             </td>
             <?php endif; ?>
@@ -339,8 +388,54 @@ $export_base = add_query_arg([
         </tbody>
       </table>
       <!-- Empty state dinamic -->
-      <div id="empty-state" class="hidden px-4 py-10 text-sm text-center text-slate-500">Niciun rezultat pentru filtrele curente.</div>
+      <div id="empty-state" class="<?php echo empty($rows) ? '' : 'hidden'; ?> px-4 py-10 text-sm text-center text-slate-500">Niciun rezultat pentru filtrele curente.</div>
     </div>
+
+    <!-- Paginare -->
+    <?php if ($total_pages > 1): ?>
+    <div class="sticky flex items-center justify-between px-4 mt-4 mb-6 bottom-4">
+      <div class="text-sm text-slate-600">
+        Pagina <?php echo $paged; ?> din <?php echo $total_pages; ?>
+      </div>
+      <div class="flex gap-1">
+        <?php
+          $base_url = strtok($_SERVER['REQUEST_URI'], '?');
+          $filter_params = [];
+          if ($s_init !== '') $filter_params['s'] = $s_init;
+          if ($county_init > 0) $filter_params['county'] = $county_init;
+          if ($city_init > 0) $filter_params['city'] = $city_init;
+        ?>
+        <?php if ($paged > 1): ?>
+          <a href="<?php echo esc_url(add_query_arg(array_merge($filter_params, ['pg' => $paged - 1]), $base_url)); ?>"
+             class="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">
+            &laquo; Anterior
+          </a>
+        <?php endif; ?>
+
+        <?php
+          $start = max(1, $paged - 2);
+          $end   = min($total_pages, $paged + 2);
+          for ($i = $start; $i <= $end; $i++):
+        ?>
+          <?php if ($i === $paged): ?>
+            <span class="px-3 py-1.5 text-sm font-semibold text-white rounded-lg bg-sky-700"><?php echo $i; ?></span>
+          <?php else: ?>
+            <a href="<?php echo esc_url(add_query_arg(array_merge($filter_params, ['pg' => $i]), $base_url)); ?>"
+               class="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">
+              <?php echo $i; ?>
+            </a>
+          <?php endif; ?>
+        <?php endfor; ?>
+
+        <?php if ($paged < $total_pages): ?>
+          <a href="<?php echo esc_url(add_query_arg(array_merge($filter_params, ['pg' => $paged + 1]), $base_url)); ?>"
+             class="px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">
+            Următor &raquo;
+          </a>
+        <?php endif; ?>
+      </div>
+    </div>
+    <?php endif; ?>
   </div>
 
   <!-- MODAL ADD/EDIT -->
@@ -532,10 +627,9 @@ function schoolsPage(){
       numar_elevi_siiir: ''
     },
 
-    /* count vizibil */
+    /* count vizibil (doar pe pagina curentă) */
     visibleCount: 0,
     totalCount: 0,
-    get visibleCountLabel(){ return this.totalCount ? (`Afișezi ${this.visibleCount} din ${this.totalCount}`) : ''; },
 
     get exportUrl(){
       try {
