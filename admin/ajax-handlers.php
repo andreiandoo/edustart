@@ -205,10 +205,12 @@ add_action('wp_ajax_edu_search_schools', function() {
     check_ajax_referer('edu_nonce', 'nonce');
     global $wpdb;
 
-    $q        = sanitize_text_field($_POST['q'] ?? '');
-    $table_s  = $wpdb->prefix . 'edu_schools';
-    $table_c  = $wpdb->prefix . 'edu_cities';
-    $table_ct = $wpdb->prefix . 'edu_counties';
+    $q         = sanitize_text_field($_POST['q'] ?? '');
+    $county_id = intval($_POST['county_id'] ?? 0);
+    $city_id   = intval($_POST['city_id'] ?? 0);
+    $table_s   = $wpdb->prefix . 'edu_schools';
+    $table_c   = $wpdb->prefix . 'edu_cities';
+    $table_ct  = $wpdb->prefix . 'edu_counties';
 
     // If not admin, limit to assigned schools (unchanged)
     if ( ! current_user_can('manage_options') ) {
@@ -227,33 +229,44 @@ add_action('wp_ajax_edu_search_schools', function() {
         ", ...$assigned) );
 
     } else {
-        // Admin: search by name OR code OR city OR county
-        if ( $q !== '' ) {
+        // Admin: search by name OR code OR city OR county, with optional county/city filters
+        $where_parts = [];
+        $params      = [];
+
+        if ($county_id > 0) {
+            $where_parts[] = 'c.county_id = %d';
+            $params[]      = $county_id;
+        }
+        if ($city_id > 0) {
+            $where_parts[] = 's.city_id = %d';
+            $params[]      = $city_id;
+        }
+        if ($q !== '') {
             $like = '%' . $wpdb->esc_like($q) . '%';
+            $where_parts[] = '(s.name LIKE %s OR CAST(s.cod AS CHAR) LIKE %s OR c.name LIKE %s OR ct.name LIKE %s)';
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+        }
 
-            // dacă e numeric, căutăm strict pe cod; altfel, LIKE pe toate
-            $rows = $wpdb->get_results( $wpdb->prepare("
-                SELECT s.id, s.cod, s.name, c.name AS city, ct.name AS county
-                FROM {$table_s} s
-                JOIN {$table_c}  c  ON s.city_id   = c.id
-                JOIN {$table_ct} ct ON c.county_id = ct.id
-                WHERE s.name LIKE %s
-                   OR CAST(s.cod AS CHAR) LIKE %s
-                   OR c.name LIKE %s
-                   OR ct.name LIKE %s
-                ORDER BY ct.name, c.name, s.name
-                LIMIT 50
-            ", $like, $like, $like, $like) );
+        $where_sql = $where_parts ? 'WHERE ' . implode(' AND ', $where_parts) : '';
+        $limit = ($county_id > 0 || $city_id > 0) ? 500 : 50;
 
+        $sql = "
+            SELECT s.id, s.cod, s.name, c.name AS city, ct.name AS county
+            FROM {$table_s} s
+            JOIN {$table_c}  c  ON s.city_id   = c.id
+            JOIN {$table_ct} ct ON c.county_id = ct.id
+            {$where_sql}
+            ORDER BY ct.name, c.name, s.name
+            LIMIT {$limit}
+        ";
+
+        if (!empty($params)) {
+            $rows = $wpdb->get_results($wpdb->prepare($sql, ...$params));
         } else {
-            $rows = $wpdb->get_results("
-                SELECT s.id, s.cod, s.name, c.name AS city, ct.name AS county
-                FROM {$table_s} s
-                JOIN {$table_c}  c  ON s.city_id   = c.id
-                JOIN {$table_ct} ct ON c.county_id = ct.id
-                ORDER BY ct.name, c.name, s.name
-                LIMIT 50
-            ");
+            $rows = $wpdb->get_results($sql);
         }
     }
 
@@ -272,7 +285,31 @@ add_action('wp_ajax_edu_search_schools', function() {
     wp_send_json($out);
 });
 
-// — Fetch a teacher’s nivel_predare meta — 
+// -- Check if email already exists in WP users --
+add_action('wp_ajax_edu_check_email', function(){
+    check_ajax_referer('edu_nonce', 'nonce');
+    $email   = sanitize_email(isset($_POST['email']) ? $_POST['email'] : '');
+    $user_id = intval(isset($_POST['user_id']) ? $_POST['user_id'] : 0);
+
+    if (!$email || !is_email($email)) {
+        wp_send_json_error(array('exists' => false, 'message' => 'Email invalid.'));
+    }
+
+    $existing = email_exists($email);
+    if ($existing && (int)$existing !== $user_id) {
+        $u = get_userdata($existing);
+        $fn = $u ? trim($u->first_name . ' ' . $u->last_name) : '';
+        if (!$fn && $u) $fn = $u->display_name ? $u->display_name : $u->user_login;
+        wp_send_json_error(array(
+            'exists'  => true,
+            'message' => 'Emailul este deja folosit de: ' . $fn . ' (#' . $existing . ').',
+        ));
+    }
+
+    wp_send_json_success(array('exists' => false));
+});
+
+// — Fetch a teacher's nivel_predare meta —
 add_action('wp_ajax_edu_get_teacher_meta', function(){
     check_ajax_referer('edu_nonce','nonce');
     $tid = intval($_POST['teacher_id'] ?? 0);

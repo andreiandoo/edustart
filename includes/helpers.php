@@ -20,7 +20,7 @@ function edu_level_human(string $level): string {
 function edu_class_labels_by_level(string $level): array {
     switch ($level) {
         case 'prescolar':
-            return ['Grupa mica','Grupa mare','Grupa pregatitoare'];
+            return ['Grupa mica','Grupa mijlocie','Grupa mare'];
         case 'primar':
             return ['Clasa 0','Clasa 1','Clasa 2','Clasa 3','Clasa 4'];
         case 'gimnazial':

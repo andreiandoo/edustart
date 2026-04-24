@@ -71,6 +71,19 @@ function edu_create_results_table() {
  */
 register_activation_hook( __FILE__, 'edu_create_generations_table' );
 register_activation_hook( __FILE__, 'edu_alter_students_add_generation_professor' );
+register_activation_hook( __FILE__, 'edu_alter_students_add_class_label' );
+register_activation_hook( __FILE__, 'edu_alter_students_add_extended_fields' );
+
+/**
+ * Auto-migrate extended student fields on admin load (idempotent).
+ * Uses a one-shot option so the ALTERs aren't re-checked on every request.
+ */
+add_action('admin_init', function () {
+    if (get_option('edu_students_extended_v1') === 'done') return;
+    if (function_exists('edu_alter_students_add_class_label'))     edu_alter_students_add_class_label();
+    if (function_exists('edu_alter_students_add_extended_fields')) edu_alter_students_add_extended_fields();
+    update_option('edu_students_extended_v1', 'done', false);
+});
 
 /**
  * Admin assets loader — extins să includă și noile pagini

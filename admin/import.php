@@ -84,7 +84,9 @@ function edu_render_import_interface() {
                                     var pct = total > 0 ? Math.round((processed / total) * 100) : 100;
                                     barEl.style.width = pct + "%";
                                     barEl.textContent = pct + "%";
-                                    statusEl.textContent = "Procesate " + processed + " / " + total + " rânduri (" + inserted + " inserate, " + updated + " actualizate, " + skipped + " omise, " + errors + " erori)";
+                                    var errMsg = "Procesate " + processed + " / " + total + " rânduri (" + inserted + " inserate, " + updated + " actualizate, " + skipped + " omise, " + errors + " erori)";
+                                    if (d.last_error) errMsg += " | Ultima eroare: " + d.last_error;
+                                    statusEl.textContent = errMsg;
 
                                     if (d.done) {
                                         barEl.style.width = "100%";
@@ -139,8 +141,12 @@ function edu_import_schools_batch() {
     $batch_size = isset($_POST['batch_size']) ? intval($_POST['batch_size']) : 500;
     $overwrite  = !empty($_POST['overwrite']);
 
+    // Dezactivează FK checks (prefixul din constraint poate diferi de $wpdb->prefix)
+    $wpdb->query('SET FOREIGN_KEY_CHECKS=0');
+
     $handle = fopen($file, 'r');
     if (!$handle) {
+        $wpdb->query('SET FOREIGN_KEY_CHECKS=1');
         wp_send_json_error('Nu pot deschide fișierul CSV.');
     }
 
@@ -281,13 +287,13 @@ function edu_import_schools_batch() {
         if ($existing_id) {
             if ($overwrite) {
                 $result = $wpdb->update("{$wpdb->prefix}edu_schools", $school_data, ['id' => $existing_id], $formats, ['%d']);
-                if ($result !== false) $updated++; else $fail++;
+                if ($result !== false) $updated++; else { $fail++; $last_err = $wpdb->last_error; }
             } else {
                 $skip++;
             }
         } else {
             $inserted = $wpdb->insert("{$wpdb->prefix}edu_schools", $school_data, $formats);
-            if ($inserted !== false) $ok++; else $fail++;
+            if ($inserted !== false) $ok++; else { $fail++; $last_err = $wpdb->last_error; }
         }
 
         $processed++;
@@ -299,6 +305,7 @@ function edu_import_schools_batch() {
     $next_offset = $offset + $processed;
 
     fclose($handle);
+    $wpdb->query('SET FOREIGN_KEY_CHECKS=1');
 
     if ($done) {
         @unlink($file);
@@ -311,5 +318,6 @@ function edu_import_schools_batch() {
         'errors'      => $fail,
         'next_offset' => $next_offset,
         'done'        => $done,
+        'last_error'  => isset($last_err) ? $last_err : '',
     ]);
 }
