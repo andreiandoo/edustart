@@ -79,7 +79,7 @@ function es_format_dt($ts_or_str){
 $s          = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
 $nivel_arr  = isset($_GET['nivel']) ? array_filter(array_map('sanitize_text_field', (array)$_GET['nivel'])) : [];
 $statut     = isset($_GET['statut']) ? sanitize_text_field(wp_unslash($_GET['statut'])) : '';
-$gen_year   = isset($_GET['gen_year']) ? sanitize_text_field(wp_unslash($_GET['gen_year'])) : '';
+$gen_year   = isset($_GET['gen_year']) ? es_normalize_year_str(sanitize_text_field(wp_unslash($_GET['gen_year']))) : '';
 $county_f   = isset($_GET['county']) ? sanitize_text_field(wp_unslash($_GET['county'])) : '';
 $an_program = isset($_GET['an_program']) ? sanitize_text_field(wp_unslash($_GET['an_program'])) : '';
 $rsoi       = isset($_GET['rsoi']) ? sanitize_text_field(wp_unslash($_GET['rsoi'])) : '';
@@ -165,7 +165,7 @@ if (!empty($prof_ids)) {
     $pid = (int)$g->professor_id;
     if (!isset($gens_by_prof[$pid])) $gens_by_prof[$pid] = [];
     $gens_by_prof[$pid][] = $g;
-    $yr = trim((string)$g->year);
+    $yr = es_normalize_year_str($g->year ?? '');
     if ($yr !== '') $years_available[$yr] = true;
   }
 
@@ -282,7 +282,7 @@ if ($gen_year !== '') {
     $has = false;
     if (!empty($gens_by_prof[$pid])) {
       foreach ($gens_by_prof[$pid] as $g) {
-        if ((string)$g->year === (string)$gen_year) { $has = true; break; }
+        if (es_normalize_year_str($g->year ?? '') === (string)$gen_year) { $has = true; break; }
       }
     }
     if ($has) $by_year[] = $u;
@@ -350,7 +350,7 @@ if ($export_csv) {
     $gen_bits = [];
     if (!empty($gens_by_prof[$pid])) {
       foreach ($gens_by_prof[$pid] as $g) {
-        $gen_bits[] = '#'.$g->id.'·'.es_level_label($g->level).'·'.$g->year;
+        $gen_bits[] = '#'.$g->id.'·'.es_level_label($g->level).'·'.es_normalize_year_str($g->year ?? '');
       }
     }
 
@@ -729,7 +729,7 @@ $export_url = add_query_arg([
                         <span class="text-slate-500">·</span>
                         <span><?php echo esc_html(es_level_label($g->level)); ?></span>
                         <span class="text-slate-500">·</span>
-                        <span><?php echo esc_html($g->year); ?></span>
+                        <span><?php echo esc_html(es_normalize_year_str($g->year ?? '')); ?></span>
                       </a>
                     <?php endforeach; ?>
                   </div>

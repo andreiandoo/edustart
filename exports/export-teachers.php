@@ -51,12 +51,13 @@ if (!function_exists('es_user_fullname')) {
 
 // ------- filtre din GET (identice cu pagina) -------
 $s          = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
-$nivel      = isset($_GET['nivel']) ? sanitize_text_field(wp_unslash($_GET['nivel'])) : '';
+$nivel_arr  = isset($_GET['nivel']) ? array_filter(array_map('sanitize_text_field', (array)wp_unslash($_GET['nivel']))) : [];
 $statut     = isset($_GET['statut']) ? sanitize_text_field(wp_unslash($_GET['statut'])) : '';
 $gen_year   = isset($_GET['gen_year']) ? sanitize_text_field(wp_unslash($_GET['gen_year'])) : '';
-$county_f   = isset($_GET['county']) ? sanitize_text_field(wp_unslash($_GET['county'])) : '';
+$county_arr = isset($_GET['county']) ? array_filter(array_map('sanitize_text_field', (array)wp_unslash($_GET['county']))) : [];
 $an_program = isset($_GET['an_program']) ? sanitize_text_field(wp_unslash($_GET['an_program'])) : '';
-$rsoi       = isset($_GET['rsoi']) ? sanitize_text_field(wp_unslash($_GET['rsoi'])) : '';
+$rsoi_arr   = isset($_GET['rsoi']) ? array_filter(array_map('sanitize_text_field', (array)wp_unslash($_GET['rsoi']))) : [];
+$tutor_arr  = isset($_GET['tutor']) ? array_filter(array_map('intval', (array)$_GET['tutor'])) : [];
 
 // ------- permisiuni tutor (opțional) -------
 $user     = wp_get_current_user();
@@ -80,8 +81,11 @@ if ($statut !== '') {
 if ($an_program !== '') {
   $meta_query[] = ['key'=>'an_program','value'=>$an_program,'compare'=>'='];
 }
-if ($rsoi !== '') {
-  $meta_query[] = ['key'=>'segment_rsoi','value'=>$rsoi,'compare'=>'='];
+if (!empty($rsoi_arr)) {
+  $meta_query[] = ['key'=>'segment_rsoi','value'=>$rsoi_arr,'compare'=>'IN'];
+}
+if (!empty($tutor_arr)) {
+  $meta_query[] = ['key'=>'assigned_tutor_id','value'=>$tutor_arr,'compare'=>'IN','type'=>'NUMERIC'];
 }
 
 $args = [
@@ -133,7 +137,7 @@ if ($prof_ids) {
     $students_count[(int)$row->professor_id] = (int)$row->total;
   }
 
-  // județe din școlile asignate
+  // school meta (name, cod SIRUTA, city, county) din școlile asignate
   $school_ids_all = [];
   foreach ($prof_ids as $pid) {
     $sids = get_user_meta($pid, 'assigned_school_ids', true);
@@ -143,18 +147,24 @@ if ($prof_ids) {
   }
   $school_ids_all = array_keys($school_ids_all);
 
-  $county_by_school = [];
+  $school_info = []; // school_id => ['name','cod','city','county']
   if ($school_ids_all) {
     $in2 = implode(',', array_fill(0, count($school_ids_all), '%d'));
     $rows = $wpdb->get_results($wpdb->prepare("
-      SELECT s.id AS school_id, j.name AS county_name
+      SELECT s.id AS school_id, s.name AS school_name, s.cod AS school_cod,
+             c.name AS city_name, j.name AS county_name
       FROM {$tbl_schools} s
-      LEFT JOIN {$tbl_cities} c  ON s.city_id = c.id
+      LEFT JOIN {$tbl_cities}   c ON s.city_id = c.id
       LEFT JOIN {$tbl_counties} j ON c.county_id = j.id
       WHERE s.id IN ($in2)
     ", ...$school_ids_all));
     foreach ($rows as $r) {
-      $county_by_school[(int)$r->school_id] = (string)$r->county_name;
+      $school_info[(int)$r->school_id] = [
+        'name'   => (string)$r->school_name,
+        'cod'    => (string)$r->school_cod,
+        'city'   => (string)$r->city_name,
+        'county' => (string)$r->county_name,
+      ];
     }
   }
 
@@ -164,8 +174,8 @@ if ($prof_ids) {
     if (is_array($sids)) {
       foreach ($sids as $sid) {
         $sid = (int)$sid;
-        if ($sid>0 && isset($county_by_school[$sid])) {
-          $nm = trim((string)$county_by_school[$sid]);
+        if ($sid>0 && isset($school_info[$sid])) {
+          $nm = trim($school_info[$sid]['county']);
           if ($nm !== '') $set[$nm] = true;
         }
       }
@@ -177,17 +187,19 @@ if ($prof_ids) {
 // ------- filtre manuale suplimentare (nivel, an generație, județ) -------
 $filtered = $all_prof;
 
-// nivel
-if ($nivel !== '') {
-  $nivel_code = es_normalize_level_code($nivel);
-  $filtered = array_values(array_filter($filtered, function($u) use ($nivel_code){
-    $raw = get_user_meta((int)$u->ID, 'nivel_predare', true);
-    if (is_array($raw)) {
-      foreach ($raw as $rv) if (es_normalize_level_code($rv) === $nivel_code) return true;
-      return false;
-    }
-    return es_normalize_level_code($raw) === $nivel_code;
-  }));
+// nivel (multiselect)
+if (!empty($nivel_arr)) {
+  $nivel_codes = array_filter(array_map('es_normalize_level_code', $nivel_arr));
+  if (!empty($nivel_codes)) {
+    $filtered = array_values(array_filter($filtered, function($u) use ($nivel_codes){
+      $raw = get_user_meta((int)$u->ID, 'nivel_predare', true);
+      if (is_array($raw)) {
+        foreach ($raw as $rv) if (in_array(es_normalize_level_code($rv), $nivel_codes, true)) return true;
+        return false;
+      }
+      return in_array(es_normalize_level_code($raw), $nivel_codes, true);
+    }));
+  }
 }
 
 // an generație
@@ -202,59 +214,131 @@ if ($gen_year !== '') {
   }));
 }
 
-// județ
-if ($county_f !== '') {
-  $filtered = array_values(array_filter($filtered, function($u) use ($counties_by_prof, $county_f){
+// județ (multiselect)
+if (!empty($county_arr)) {
+  $filtered = array_values(array_filter($filtered, function($u) use ($counties_by_prof, $county_arr){
     $pid = (int)$u->ID;
     $ctys = $counties_by_prof[$pid] ?? [];
-    return in_array($county_f, $ctys, true);
+    return !empty(array_intersect($county_arr, $ctys));
   }));
 }
 
 // sortare finală
 usort($filtered, fn($a,$b)=> strcasecmp($a->display_name, $b->display_name));
 
-// ------- pregătim CSV -------
+// Status profesor labels (pentru a exporta "În așteptare" etc., nu slug-ul)
+$status_prof_labels = [
+  'in_asteptare'         => 'În așteptare',
+  'activ'                => 'Activ',
+  'drop-out'             => 'Drop-out',
+  'eliminat'             => 'Eliminat',
+  'concediu_maternitate' => 'Concediu maternitate',
+  'concediu_studii'      => 'Concediu studii',
+];
+
+// ------- pregătim CSV în ordinea cerută -------
 $headers = [
-  'ID','Nume','Email','Cod SLF','Statut','Nivel predare',
-  'An program','RSOI','Teach','Materie','Județ(e)',
-  '#Elevi','Generații (id·nivel·an)',
-  'Ultima activitate','Înregistrare','Tutor'
+  'ID',
+  'Nume complet',
+  'Prenume',
+  'Nume',
+  'Email',
+  'Telefon',
+  'Cod SLF',
+  'Segment RSOI',
+  'Generație Teach',
+  'Status',
+  'Statut',
+  'Calificare',
+  'Experiență',
+  'Nivel predare',
+  'Materia predată',
+  'Altă materie',
+  'An program',
+  'Cohorte',
+  'Tutor coordonator',
+  'Mentor SEL',
+  'Mentor Literație',
+  'Mentor Numerație',
+  'Școli asignate',
+  'Județ',
+  'Oraș',
+  'Număr elevi',
+  'Generații (id·nivel·an)',
+  'Data înregistrare',
+  'Ultima activitate',
 ];
 
 $rows = [];
 foreach ($filtered as $u) {
   $pid  = (int)$u->ID;
-  $name = trim(($u->first_name ?: $u->display_name).' '.($u->last_name ?: ''));
-  if ($name === '') $name = $u->display_name ?: $u->user_login;
+  $fn   = (string)($u->first_name ?? '');
+  $ln   = (string)($u->last_name ?? '');
+  $full = trim($fn.' '.$ln);
+  if ($full === '') $full = $u->display_name ?: $u->user_login;
 
-  $cod     = get_user_meta($pid, 'cod_slf', true);
+  $phone   = (string) get_user_meta($pid, 'phone', true);
+  $cod     = (string) get_user_meta($pid, 'cod_slf', true);
+  $rsoi_v  = (string) get_user_meta($pid, 'segment_rsoi', true);
+  $teach_v = (string) get_user_meta($pid, 'generatie', true);
+
+  // Status profesor (user_status_profesor) — etichetăm cu label uman
+  $status_raw = (string) get_user_meta($pid, 'user_status_profesor', true);
+  $status_lbl = $status_raw !== '' ? ($status_prof_labels[$status_raw] ?? $status_raw) : '';
+
+  // Statut (statut_prof) — e text free form (Titular, Suplinitor etc.)
+  $statut_v = (string) get_user_meta($pid, 'statut_prof', true);
+
+  $calif   = (string) get_user_meta($pid, 'calificare', true);
+  $exper   = (string) get_user_meta($pid, 'experienta', true);
   $nivel_v = get_user_meta($pid, 'nivel_predare', true);
-  $mat     = get_user_meta($pid, 'materia_predata', true);
-  $an_prog = get_user_meta($pid, 'an_program', true);
-  $rsoi_v  = get_user_meta($pid, 'segment_rsoi', true);
-  $teach_v = get_user_meta($pid, 'generatie', true);
+  $mat     = (string) get_user_meta($pid, 'materia_predata', true);
+  $mat_alt = (string) get_user_meta($pid, 'materia_alta', true);
+  $an_prog = (string) get_user_meta($pid, 'an_program', true);
+  $cohorte = (string) get_user_meta($pid, 'cohorte', true);
 
-  $stat = get_user_meta($pid, 'user_status_profesor', true);
-  if ($stat==='') $stat = get_user_meta($pid, 'statut_prof', true);
-  if ($stat==='') $stat = get_user_meta($pid, 'statut', true);
-
-  // tutor
+  // Tutor coordonator
   $tid   = (int) get_user_meta($pid, 'assigned_tutor_id', true);
-  $tname = '—';
+  $tname = '';
   if ($tid > 0) {
     $tu = get_userdata($tid);
     if ($tu) $tname = es_user_fullname($tu);
   }
 
-  // județe
-  $ctys = $counties_by_prof[$pid] ?? [];
-  $cty_str = $ctys ? implode('; ', $ctys) : '';
+  // Mentori
+  $mentor_id_sel = (int) get_user_meta($pid, 'mentor_sel', true);
+  $mentor_id_lit = (int) get_user_meta($pid, 'mentor_literatie', true);
+  $mentor_id_num = (int) get_user_meta($pid, 'mentor_numeratie', true);
+  $mentor_name_sel = $mentor_id_sel ? ((($mu = get_userdata($mentor_id_sel)) ? es_user_fullname($mu) : '')) : '';
+  $mentor_name_lit = $mentor_id_lit ? ((($mu = get_userdata($mentor_id_lit)) ? es_user_fullname($mu) : '')) : '';
+  $mentor_name_num = $mentor_id_num ? ((($mu = get_userdata($mentor_id_num)) ? es_user_fullname($mu) : '')) : '';
 
-  // elevi
+  // Școli asignate — nume (cod SIRUTA), separate prin "|"
+  $sids = get_user_meta($pid, 'assigned_school_ids', true);
+  $school_parts = [];
+  $school_cities = [];
+  $school_counties = [];
+  if (is_array($sids)) {
+    foreach ($sids as $sid) {
+      $sid = (int)$sid;
+      if ($sid > 0 && isset($school_info[$sid])) {
+        $inf  = $school_info[$sid];
+        $part = $inf['name'];
+        if ($inf['cod'] !== '') $part .= ' ('.$inf['cod'].')';
+        $school_parts[] = $part;
+        if ($inf['city']   !== '') $school_cities[$inf['city']] = true;
+        if ($inf['county'] !== '') $school_counties[$inf['county']] = true;
+      }
+    }
+  }
+  $schools_str = implode(' | ', $school_parts);
+  $judet_str   = implode('; ', array_keys($school_counties));
+  $oras_str    = implode('; ', array_keys($school_cities));
+
+  // Elevi
   $elevi = (int)($students_count[$pid] ?? 0);
 
-  // generații
+  // Generații
   $gen_bits = [];
   if (!empty($gens_by_prof[$pid])) {
     foreach ($gens_by_prof[$pid] as $g) {
@@ -262,34 +346,44 @@ foreach ($filtered as $u) {
     }
   }
 
-  // activitate / înregistrare
-  $last = get_user_meta($pid,'last_activity',true);
+  // Data înregistrare / ultima activitate
+  $reg_ts = $u->user_registered ? strtotime($u->user_registered) : 0;
+  $last   = get_user_meta($pid,'last_activity',true);
   if (!$last) $last = get_user_meta($pid,'last_login',true);
   if (!$last) $last = get_user_meta($pid,'last_seen',true);
-  if (!$last) $last = strtotime($u->user_registered);
-
-  $reg_ts = $u->user_registered ? strtotime($u->user_registered) : 0;
 
   $rows[] = [
-    $pid,
-    $name,
-    $u->user_email,
-    $cod ?: '',
-    $stat ?: '',
-    es_level_label($nivel_v),
-    $an_prog ?: '',
-    $rsoi_v ?: '',
-    $teach_v ?: '',
-    $mat ?: '',
-    $cty_str,
-    $elevi,
-    implode(' | ', $gen_bits),
-    es_format_dt($last),
-    es_format_dt($reg_ts),
-    $tname,
+    $pid,                       // ID
+    $full,                      // Nume complet
+    $fn,                        // Prenume
+    $ln,                        // Nume
+    (string)$u->user_email,     // Email
+    $phone,                     // Telefon
+    $cod,                       // Cod SLF
+    $rsoi_v,                    // Segment RSOI
+    $teach_v,                   // Generație Teach
+    $status_lbl,                // Status
+    $statut_v,                  // Statut
+    $calif,                     // Calificare
+    $exper,                     // Experiență
+    es_level_label($nivel_v),   // Nivel predare
+    $mat,                       // Materia predată
+    $mat_alt,                   // Altă materie
+    $an_prog,                   // An program
+    $cohorte,                   // Cohorte
+    $tname,                     // Tutor coordonator
+    $mentor_name_sel,           // Mentor SEL
+    $mentor_name_lit,           // Mentor Literație
+    $mentor_name_num,           // Mentor Numerație
+    $schools_str,               // Școli asignate
+    $judet_str,                 // Județ
+    $oras_str,                  // Oraș
+    $elevi,                     // Număr elevi
+    implode(' | ', $gen_bits),  // Generații (id·nivel·an)
+    $reg_ts ? es_format_dt($reg_ts) : '',  // Data înregistrare
+    $last   ? es_format_dt($last)   : '',  // Ultima activitate
   ];
 }
 
-// trimite CSV (fără col. "Profil")
 $filename = 'profesori_' . date('Y-m-d_His') . '.csv';
 es_send_csv($filename, $headers, $rows);

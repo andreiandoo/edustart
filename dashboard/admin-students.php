@@ -53,7 +53,17 @@ function es_gender_label($g) {
 
 /* ================= Filtre & paginare ================= */
 $s            = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
-$prof_filter  = isset($_GET['prof']) ? (int)$_GET['prof'] : 0;
+// Profesor filter: accept prof[]=ID array (new) or prof=ID scalar (legacy)
+$prof_arr = [];
+if (isset($_GET['prof'])) {
+  $raw = wp_unslash($_GET['prof']);
+  if (is_array($raw)) {
+    $prof_arr = array_values(array_filter(array_map('intval', $raw)));
+  } else {
+    $pid = (int)$raw;
+    if ($pid > 0) $prof_arr = [$pid];
+  }
+}
 $perpage      = max(10, min(200, (int)($_GET['perpage'] ?? 25)));
 $paged        = max(1, (int)($_GET['paged'] ?? 1));
 $offset       = ($paged - 1) * $perpage;
@@ -92,9 +102,10 @@ if ($s !== '') {
   $params[] = $like;
   $params[] = $like;
 }
-if ($prof_filter > 0) {
-  $where .= " AND professor_id = %d";
-  $params[] = $prof_filter;
+if (!empty($prof_arr)) {
+  $in_ph = implode(',', array_fill(0, count($prof_arr), '%d'));
+  $where .= " AND professor_id IN ($in_ph)";
+  foreach ($prof_arr as $pid) $params[] = $pid;
 }
 
 /* Total */
@@ -108,7 +119,9 @@ $total = (int)(
 $sql_page = "
   SELECT id, generation_id, class_label, professor_id, class_id,
          first_name, last_name, age, gender,
-         observation, notes, sit_abs, frecventa, bursa, dif_limba
+         observation, notes, sit_abs, frecventa, bursa, dif_limba,
+         repeta_clasa, alte_obs, cauze_abs, risc_abandon,
+         demers_familie, demers_conducere, demers_consilier
   FROM {$tbl_students}
   {$where}
   ORDER BY id DESC
@@ -267,14 +280,14 @@ if ($student_ids) {
 }
 
 /* ================= Build UI ================= */
-// base url fără paged
+// base url fără paged (păstrăm prof[] ca array)
 $qs = $_GET;
 unset($qs['paged']);
 foreach ($qs as $kk => $vv) {
+  if ($kk === 'prof') continue; // preserve prof[] as array
   if (is_array($vv) || is_object($vv)) {
     unset($qs[$kk]);
   } else {
-    // force to string; avoid objects sneaking in as Stringable
     $qs[$kk] = (string) $vv;
   }
 }
@@ -284,42 +297,50 @@ $paged       = min($paged, $total_pages);
 
 /* ================= Coloane toggle (fixe: id, name, raport) ================= */
 $COLS = [
-  'id'         => ['label'=>'ID',          'fixed'=>true],
-  'name'       => ['label'=>'Nume elev',   'fixed'=>true],
-  'age'        => ['label'=>'Vârstă'],
-  'gender'     => ['label'=>'Gen'],
-  'class'      => ['label'=>'Clasă'],
+  'id'               => ['label'=>'ID',          'fixed'=>true],
+  'name'             => ['label'=>'Nume elev',   'fixed'=>true],
+  'age'              => ['label'=>'Vârstă'],
+  'gender'           => ['label'=>'Gen'],
+  'class'            => ['label'=>'Clasă'],
 
-  'sel_t0'     => ['label'=>'SEL T0'],
-  'sel_ti'     => ['label'=>'SEL Ti'],
-  'sel_t1'     => ['label'=>'SEL T1'],
-  'lit_t0'     => ['label'=>'LIT T0'],
-  'lit_t1'     => ['label'=>'LIT T1'],
-  'num_t0'     => ['label'=>'NUM T0'],
-  'num_t1'     => ['label'=>'NUM T1'],
+  'sel_t0'           => ['label'=>'SEL T0'],
+  'sel_ti'           => ['label'=>'SEL Ti'],
+  'sel_t1'           => ['label'=>'SEL T1'],
+  'lit_t0'           => ['label'=>'LIT T0'],
+  'lit_t1'           => ['label'=>'LIT T1'],
+  'num_t0'           => ['label'=>'NUM T0'],
+  'num_t1'           => ['label'=>'NUM T1'],
 
-  'observation'=> ['label'=>'Observație'],
-  'notes'      => ['label'=>'Note'],
-  'sit_abs'    => ['label'=>'Sit. abs.'],
-  'frecventa'  => ['label'=>'Frecvență'],
-  'bursa'      => ['label'=>'Bursa'],
-  'dif_limba'  => ['label'=>'Dific. limbă'],
+  'observation'      => ['label'=>'Modificări statut elev'],
+  'repeta_clasa'     => ['label'=>'Repetă clasa'],
+  'alte_obs'         => ['label'=>'Alte observații'],
+  'notes'            => ['label'=>'Mențiuni'],
+  'sit_abs'          => ['label'=>'Sit. abs.'],
+  'cauze_abs'        => ['label'=>'Cauze absenteism'],
+  'risc_abandon'     => ['label'=>'Risc abandon'],
+  'frecventa'        => ['label'=>'Frecvență'],
+  'bursa'            => ['label'=>'Bursa'],
+  'dif_limba'        => ['label'=>'Dific. limbă'],
+  'demers_familie'   => ['label'=>'Discuție cu familia'],
+  'demers_conducere' => ['label'=>'Discuție cu conducerea școlii'],
+  'demers_consilier' => ['label'=>'Consilier / mediator școlar'],
 
-  'school'     => ['label'=>'Școală'],
-  'city'       => ['label'=>'Oraș'],
-  'county'     => ['label'=>'Județ'],
+  'school'           => ['label'=>'Școală'],
+  'city'             => ['label'=>'Oraș'],
+  'county'           => ['label'=>'Județ'],
 
-  'report'     => ['label'=>'Raport',      'fixed'=>true],
-  'prof'       => ['label'=>'Profesor'],
-  'gen'        => ['label'=>'Generație'],
+  'report'           => ['label'=>'Raport',      'fixed'=>true],
+  'prof'             => ['label'=>'Profesor'],
+  'gen'              => ['label'=>'Generație'],
 ];
 
-$export_url = add_query_arg([
+$export_args = [
   'action'   => 'es_export_students',
   '_wpnonce' => wp_create_nonce('es_export_students'),
   's'        => isset($_GET['s']) ? (string)$_GET['s'] : '',
-  'prof'     => isset($_GET['prof']) ? (string)$_GET['prof'] : '',
-], admin_url('admin-post.php'));
+];
+if (!empty($prof_arr)) $export_args['prof'] = $prof_arr; // array -> ?prof[]=1&prof[]=2
+$export_url = add_query_arg($export_args, admin_url('admin-post.php'));
 
 $s_safe = is_scalar($s) ? $s : '';
 
@@ -377,15 +398,48 @@ $s_safe = is_scalar($s) ? $s : '';
           class="absolute z-20 hidden w-full mt-1 overflow-auto bg-white border rounded-lg shadow-lg max-h-72 border-slate-200"></div>
     </div>
 
-    <!-- Profesor -->
-    <div class="md:col-span-4">
+    <!-- Profesor (multiselect) -->
+    <div class="relative md:col-span-4" id="stud-prof-wrap">
       <label class="block mb-1 text-xs font-medium text-slate-600">Profesor</label>
-      <select name="prof" class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
-        <option value="0">— Toți profesorii —</option>
-        <?php foreach ($prof_options as $pid=>$pname): ?>
-          <option value="<?php echo (int)$pid; ?>" <?php selected($prof_filter===$pid); ?>><?php echo esc_html($pname); ?></option>
+      <div id="stud-prof-inputs">
+        <?php foreach ($prof_arr as $pid): ?>
+          <input type="hidden" name="prof[]" value="<?php echo (int)$pid; ?>">
         <?php endforeach; ?>
-      </select>
+      </div>
+      <div id="stud-prof-trigger" class="flex items-center gap-1 w-full min-h-[38px] px-3 py-1.5 text-sm bg-white border shadow-sm rounded-xl border-slate-300 cursor-pointer hover:border-slate-400 flex-wrap">
+        <?php if (empty($prof_arr)): ?>
+          <span class="ms-placeholder text-slate-400">— Toți profesorii —</span>
+        <?php else: ?>
+          <?php foreach ($prof_arr as $pid):
+            $lbl = isset($prof_options[$pid]) ? $prof_options[$pid] : ('#' . (int)$pid);
+          ?>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-200 ms-tag" data-val="<?php echo (int)$pid; ?>">
+              <?php echo esc_html($lbl); ?>
+              <button type="button" class="ms-remove hover:text-red-600">&times;</button>
+            </span>
+          <?php endforeach; ?>
+        <?php endif; ?>
+        <svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </div>
+      <div id="stud-prof-dropdown" class="absolute z-30 hidden w-full py-1 mt-1 overflow-auto bg-white border shadow-lg rounded-xl border-slate-200 max-h-72">
+        <div class="sticky top-0 px-2 pt-1 pb-2 bg-white border-b border-slate-100">
+          <input type="text" id="stud-prof-search" placeholder="Caută profesor..."
+                 class="w-full px-2 py-1 text-sm bg-white border rounded-lg border-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500">
+        </div>
+        <?php foreach ($prof_options as $pid => $pname):
+          $on = in_array((int)$pid, $prof_arr, true);
+        ?>
+          <div class="ms-opt flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-slate-50"
+               data-val="<?php echo (int)$pid; ?>" data-name="<?php echo esc_attr(mb_strtolower(remove_accents((string)$pname))); ?>">
+            <span class="inline-flex items-center justify-center w-4 h-4 rounded border ms-check <?php echo $on ? 'bg-sky-600 border-sky-600' : 'bg-white border-slate-300'; ?>">
+              <?php if ($on): ?>
+                <svg class="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <?php endif; ?>
+            </span>
+            <span><?php echo esc_html($pname); ?></span>
+          </div>
+        <?php endforeach; ?>
+      </div>
     </div>
 
     <!-- Per page -->
@@ -428,7 +482,7 @@ $s_safe = is_scalar($s) ? $s : '';
 </section>
 
 <section class="px-6 pb-8 mobile:px-2 mobile:pb-12">
-  <div class="relative overflow-x-auto bg-white border shadow-sm rounded-2xl border-slate-200">
+  <div class="relative overflow-auto bg-white border shadow-sm rounded-2xl border-slate-200 max-h-[610px]">
     <table class="relative w-full text-sm table-auto" id="stud-table">
       <thead class="sticky top-0 bg-sky-800 backdrop-blur">
         <tr class="text-white">
@@ -452,12 +506,19 @@ $s_safe = is_scalar($s) ? $s : '';
           <th class="px-3 py-3 font-semibold text-center border-b border-slate-200" data-col="num_t1">NUM T1</th>
 
           <!-- Extra elev -->
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="observation">Observație</th>
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="notes">Note</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="observation">Modificări statut elev</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="repeta_clasa">Repetă clasa</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="alte_obs">Alte observații</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="notes">Mențiuni</th>
           <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="sit_abs">Sit. abs.</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="cauze_abs">Cauze absenteism</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="risc_abandon">Risc abandon</th>
           <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="frecventa">Frecvență</th>
           <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="bursa">Bursa</th>
           <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="dif_limba">Dific. limbă</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="demers_familie">Discuție cu familia</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="demers_conducere">Discuție cu conducerea școlii</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="demers_consilier">Consilier / mediator școlar</th>
 
           <!-- Școala / Oraș / Județ -->
           <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="school">Școală</th>
@@ -539,11 +600,18 @@ $s_safe = is_scalar($s) ? $s : '';
             <td class="px-3 py-3 text-center align-top" data-col="num_t1"><?php echo $num_t1; ?></td>
 
             <td class="px-3 py-3 align-top text-slate-800" data-col="observation"><?php echo $r->observation ? esc_html($r->observation) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="repeta_clasa"><?php echo $r->repeta_clasa ? esc_html($r->repeta_clasa) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="alte_obs"><?php echo $r->alte_obs ? esc_html($r->alte_obs) : '—'; ?></td>
             <td class="px-3 py-3 align-top text-slate-800" data-col="notes"><?php echo $r->notes ? esc_html($r->notes) : '—'; ?></td>
             <td class="px-3 py-3 align-top text-slate-800" data-col="sit_abs"><?php echo $r->sit_abs ? esc_html($r->sit_abs) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="cauze_abs"><?php echo $r->cauze_abs ? esc_html($r->cauze_abs) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="risc_abandon"><?php echo $r->risc_abandon ? esc_html($r->risc_abandon) : '—'; ?></td>
             <td class="px-3 py-3 align-top text-slate-800" data-col="frecventa"><?php echo $r->frecventa ? esc_html($r->frecventa) : '—'; ?></td>
             <td class="px-3 py-3 align-top text-slate-800" data-col="bursa"><?php echo $r->bursa ? esc_html($r->bursa) : '—'; ?></td>
             <td class="px-3 py-3 align-top text-slate-800" data-col="dif_limba"><?php echo $r->dif_limba ? esc_html($r->dif_limba) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="demers_familie"><?php echo $r->demers_familie ? esc_html($r->demers_familie) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="demers_conducere"><?php echo $r->demers_conducere ? esc_html($r->demers_conducere) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="demers_consilier"><?php echo $r->demers_consilier ? esc_html($r->demers_consilier) : '—'; ?></td>
 
             <td class="px-3 py-3 align-top text-slate-800" data-col="school"><?php echo esc_html($school_label); ?></td>
             <td class="px-3 py-3 align-top text-slate-800" data-col="city"><?php echo esc_html($city_label); ?></td>
@@ -591,6 +659,99 @@ $s_safe = is_scalar($s) ? $s : '';
     </div>
   <?php endif; ?>
 </section>
+
+<!-- JS: Profesor multiselect dropdown -->
+<script>
+(function(){
+  const prefix = 'stud-prof';
+  const inputName = 'prof[]';
+  const wrap     = document.getElementById(prefix + '-wrap');
+  const trigger  = document.getElementById(prefix + '-trigger');
+  const dropdown = document.getElementById(prefix + '-dropdown');
+  const inputs   = document.getElementById(prefix + '-inputs');
+  const search   = document.getElementById(prefix + '-search');
+  if (!wrap || !trigger || !dropdown || !inputs) return;
+
+  const placeholder = '— Toți profesorii —';
+  const checkSvg = '<svg class="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>';
+  const arrow    = '<svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>';
+
+  // selected = list of option ids currently checked (strings)
+  let selected = Array.from(dropdown.querySelectorAll('.ms-opt .ms-check.bg-sky-600'))
+    .map(el => el.closest('.ms-opt')?.dataset.val).filter(Boolean);
+
+  // option label map
+  const optLabels = {};
+  dropdown.querySelectorAll('.ms-opt').forEach(opt => {
+    optLabels[opt.dataset.val] = opt.querySelector('span:last-child')?.textContent || ('#' + opt.dataset.val);
+  });
+
+  function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
+
+  function renderTrigger(){
+    inputs.innerHTML = selected.map(v => `<input type="hidden" name="${inputName}" value="${v}">`).join('');
+    const tags = selected.map(v => {
+      const lab = optLabels[v] || ('#' + v);
+      return `<span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-200 ms-tag" data-val="${v}">
+        ${escapeHtml(lab)}<button type="button" class="ms-remove hover:text-red-600">&times;</button></span>`;
+    }).join('');
+    trigger.innerHTML = selected.length ? tags + arrow
+      : `<span class="ms-placeholder text-slate-400">${placeholder}</span>` + arrow;
+  }
+
+  function renderOpts(){
+    dropdown.querySelectorAll('.ms-opt').forEach(opt => {
+      const v = opt.dataset.val, isOn = selected.includes(v);
+      const box = opt.querySelector('.ms-check');
+      box.className = 'inline-flex items-center justify-center w-4 h-4 rounded border ms-check ' + (isOn ? 'bg-sky-600 border-sky-600' : 'bg-white border-slate-300');
+      box.innerHTML = isOn ? checkSvg : '';
+    });
+  }
+
+  function applySearch(q){
+    const qn = (q || '').toString().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
+    dropdown.querySelectorAll('.ms-opt').forEach(opt => {
+      const hay = (opt.dataset.name || '');
+      opt.style.display = (!qn || hay.includes(qn)) ? '' : 'none';
+    });
+  }
+
+  trigger.addEventListener('click', (e) => {
+    if (e.target.closest('.ms-remove')) {
+      const tag = e.target.closest('.ms-tag');
+      if (tag?.dataset.val) {
+        selected = selected.filter(v => v !== tag.dataset.val);
+        renderTrigger(); renderOpts();
+      }
+      return;
+    }
+    dropdown.classList.toggle('hidden');
+    if (!dropdown.classList.contains('hidden') && search) {
+      search.value = '';
+      applySearch('');
+      search.focus();
+    }
+  });
+
+  dropdown.addEventListener('click', (e) => {
+    const opt = e.target.closest('.ms-opt');
+    if (!opt) return;
+    const val = opt.dataset.val;
+    if (selected.includes(val)) selected = selected.filter(v => v !== val);
+    else selected.push(val);
+    renderTrigger(); renderOpts();
+  });
+
+  search?.addEventListener('input', () => applySearch(search.value));
+  search?.addEventListener('click', (e) => e.stopPropagation());
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#' + prefix + '-wrap')) dropdown.classList.add('hidden');
+  });
+
+  renderTrigger();
+})();
+</script>
 
 <!-- JS: toggle coloane cu persistenta in localStorage -->
 <script>

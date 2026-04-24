@@ -90,7 +90,7 @@ if ($can_manage && !empty($_POST['school_action']) && $_POST['school_action'] ==
 }
 
 /* Filtre inițiale (NU le mai folosim pentru GET — doar pentru preselectare UI) */
-$s_init      = sanitize_text_field($_GET['s'] ?? '');
+$s_init      = sanitize_text_field($_GET['q'] ?? ($_GET['s'] ?? ''));
 $county_init = (int)($_GET['county'] ?? 0);
 $city_init   = (int)($_GET['city'] ?? 0);
 
@@ -213,11 +213,11 @@ $export_base = add_query_arg([
 
     <!-- FILTRE -->
     <section class="mb-6">
-      <form id="schools-filter-form" method="get" class="grid items-end grid-cols-1 gap-3 md:grid-cols-12">
+      <form id="schools-filter-form" method="get" action="<?php echo esc_url(home_url('/panou/scoli/')); ?>" class="grid items-end grid-cols-1 gap-3 md:grid-cols-12">
         <!-- Căutare (AJAX sugestii) -->
         <div class="relative md:col-span-4">
           <label class="block mb-1 text-xs font-medium text-slate-600">Caută școală (nume/cod)</label>
-          <input type="text" name="s" x-model.trim="s" @input="onSearchInput()" @keydown.escape="showSuggest=false"
+          <input type="text" name="q" x-model.trim="s" @input="onSearchInput()" @keydown.escape="showSuggest=false"
                  autocomplete="off" placeholder="Ex: Școala Gimnazială …"
                  value="<?php echo esc_attr($s_init); ?>"
                  class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-600 focuse:border-transparent focus:outline-none">
@@ -401,7 +401,7 @@ $export_base = add_query_arg([
         <?php
           $base_url = strtok($_SERVER['REQUEST_URI'], '?');
           $filter_params = [];
-          if ($s_init !== '') $filter_params['s'] = $s_init;
+          if ($s_init !== '') $filter_params['q'] = $s_init;
           if ($county_init > 0) $filter_params['county'] = $county_init;
           if ($city_init > 0) $filter_params['city'] = $city_init;
         ?>

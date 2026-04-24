@@ -1,5 +1,11 @@
 <?php
 /* Template Name: Lista generatii */
+
+if (isset($_GET['export']) && $_GET['export'] === 'csv') {
+  require_once get_stylesheet_directory() . '/dashboard/admin-generatii-export.php';
+  exit;
+}
+
 include get_template_directory() . '/partials/logged-styles.php';
 ?>
 

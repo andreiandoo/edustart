@@ -16,10 +16,22 @@ $tbl_users        = $wpdb->users;
 $tbl_schools      = $wpdb->prefix . 'edu_schools';
 $tbl_cities       = $wpdb->prefix . 'edu_cities';
 $tbl_counties     = $wpdb->prefix . 'edu_counties';
+$tbl_classes      = $wpdb->prefix . 'edu_classes';
 
 /* === Filtre din GET (aceleași ca în UI) === */
-$s           = isset($_GET['s'])    ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
-$prof_filter = isset($_GET['prof']) ? (int) $_GET['prof'] : 0;
+$s = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
+
+// Profesor filter: acceptă prof[]=ID (nou) sau prof=ID (legacy)
+$prof_arr = [];
+if (isset($_GET['prof'])) {
+  $raw = wp_unslash($_GET['prof']);
+  if (is_array($raw)) {
+    $prof_arr = array_values(array_filter(array_map('intval', $raw)));
+  } else {
+    $pid = (int)$raw;
+    if ($pid > 0) $prof_arr = [$pid];
+  }
+}
 
 /* === Query elevi (fără paginare: exportă toate potrivirile) === */
 $where  = 'WHERE 1=1';
@@ -34,15 +46,19 @@ if ($s !== '') {
   )";
   $params[] = $like; $params[] = $like; $params[] = $like;
 }
-if ($prof_filter > 0) {
-  $where .= " AND professor_id = %d";
-  $params[] = $prof_filter;
+if (!empty($prof_arr)) {
+  $in_ph = implode(',', array_fill(0, count($prof_arr), '%d'));
+  $where .= " AND professor_id IN ($in_ph)";
+  foreach ($prof_arr as $pid) $params[] = $pid;
 }
 
 $sql_all = "
   SELECT id, generation_id, class_label, professor_id, class_id,
          first_name, last_name, age, gender,
-         observation, notes, sit_abs, frecventa, bursa, dif_limba
+         observation, notes, sit_abs, frecventa, bursa, dif_limba,
+         repeta_clasa, alte_obs, cauze_abs, risc_abandon,
+         demers_familie, demers_conducere, demers_consilier,
+         created_at, updated_at
   FROM {$tbl_students}
   {$where}
   ORDER BY id DESC
@@ -50,17 +66,28 @@ $sql_all = "
 $students = !empty($params) ? $wpdb->get_results($wpdb->prepare($sql_all, $params))
                             : $wpdb->get_results($sql_all);
 
+/* === Headere CSV (toate coloanele din tabel + derivate) === */
+$headers = [
+  'ID',
+  'Prenume','Nume',
+  'Nume complet',
+  'Vârstă','Gen',
+  'Clasă (label)','Class ID','Clasă (nume)',
+  'SEL T0','SEL Ti','SEL T1',
+  'LIT T0','LIT T1',
+  'NUM T0','NUM T1',
+  'Modificări statut elev','Repetă clasa','Alte observații','Mențiuni',
+  'Sit. abs.','Cauze absenteism','Risc abandon',
+  'Frecvență','Bursa','Dific. limbă',
+  'Discuție cu familia','Discuție cu conducerea școlii','Consilier / mediator școlar',
+  'Școală','Oraș','Județ',
+  'Professor ID','Profesor','Email profesor',
+  'Generation ID','Generație','An generație','Nivel generație',
+  'Creat la','Actualizat la',
+];
+
 if (!$students) {
-  // Nimic de exportat -> trimitem headere corecte + un CSV gol cu doar header
-  $headers = [
-    'ID','Nume elev','Vârstă','Gen','Clasă',
-    'SEL T0','SEL Ti','SEL T1',
-    'LIT T0','LIT T1',
-    'NUM T0','NUM T1',
-    'Observație','Note','Sit. abs.','Frecvență','Bursa','Dific. limbă',
-    'Școală','Oraș','Județ','Profesor','Generație'
-  ];
-  es_send_csv('students_'.date('Y-m-d_His').'.csv', $headers, []);
+  es_send_csv('elevi_'.date('Y-m-d_His').'.csv', $headers, []);
 }
 
 /* === Bulk maps: profesori / generații === */
@@ -72,7 +99,7 @@ $gids = array_values(array_unique(array_filter(array_map(fn($r)=> (int)$r->gener
 
 if ($pids) {
   $in = implode(',', array_fill(0, count($pids), '%d'));
-  $us = $wpdb->get_results($wpdb->prepare("SELECT ID, user_login, display_name FROM {$tbl_users} WHERE ID IN ($in)", ...$pids));
+  $us = $wpdb->get_results($wpdb->prepare("SELECT ID, user_login, user_email, display_name FROM {$tbl_users} WHERE ID IN ($in)", ...$pids));
   foreach ($us as $u) {
     $fn = get_user_meta((int)$u->ID, 'first_name', true);
     $ln = get_user_meta((int)$u->ID, 'last_name',  true);
@@ -81,14 +108,24 @@ if ($pids) {
     $prof_map[(int)$u->ID] = (object)[
       'ID'      => (int)$u->ID,
       'name'    => $name ?: ($u->display_name ?: $u->user_login),
+      'email'   => (string)$u->user_email,
       'schools' => is_array($sids) ? array_values(array_filter(array_map('intval',$sids))) : [],
     ];
   }
 }
 if ($gids) {
   $in = implode(',', array_fill(0, count($gids), '%d'));
-  $gs = $wpdb->get_results($wpdb->prepare("SELECT id, name FROM {$tbl_generations} WHERE id IN ($in)", ...$gids));
+  $gs = $wpdb->get_results($wpdb->prepare("SELECT id, name, year, level FROM {$tbl_generations} WHERE id IN ($in)", ...$gids));
   foreach ($gs as $g) $gen_map[(int)$g->id] = $g;
+}
+
+/* === Class map === */
+$class_map = []; // class_id => name
+$cids = array_values(array_unique(array_filter(array_map(fn($r)=> (int)$r->class_id, $students))));
+if ($cids) {
+  $in = implode(',', array_fill(0, count($cids), '%d'));
+  $cs = $wpdb->get_results($wpdb->prepare("SELECT id, name FROM {$tbl_classes} WHERE id IN ($in)", ...$cids));
+  foreach ($cs as $c) $class_map[(int)$c->id] = (string)$c->name;
 }
 
 /* === Școli / Oraș / Județ (din profesor) === */
@@ -188,29 +225,21 @@ $gender_label = static function($g) {
   return $g !== '' ? $g : '—';
 };
 
-/* === Headere CSV (toate coloanele din tabel, fără „Raport”) === */
-$headers = [
-  'ID','Nume elev','Vârstă','Gen','Clasă',
-  'SEL T0','SEL Ti','SEL T1',
-  'LIT T0','LIT T1',
-  'NUM T0','NUM T1',
-  'Observație','Note','Sit. abs.','Frecvență','Bursa','Dific. limbă',
-  'Școală','Oraș','Județ',
-  'Profesor','Generație',
-];
-
 /* === Rows CSV === */
 $csv_rows = [];
 foreach ($students as $r) {
   $sid   = (int)$r->id;
-  $name  = trim((string)$r->first_name.' '.(string)$r->last_name);
-  if ($name === '') $name = '—';
+  $fname = (string)($r->first_name ?? '');
+  $lname = (string)($r->last_name ?? '');
+  $full  = trim($fname.' '.$lname);
+  if ($full === '') $full = '—';
 
-  $age   = (string)($r->age ?? '');
-  $age   = $age !== '' ? $age : '—';
-
+  $age   = ($r->age !== null && $r->age !== '') ? (string)$r->age : '';
   $gen   = $gender_label($r->gender ?? '');
-  $class = trim((string)($r->class_label ?? '')) ?: '—';
+
+  $class_label = (string)($r->class_label ?? '');
+  $class_id    = (int)($r->class_id ?? 0);
+  $class_name  = $class_id && isset($class_map[$class_id]) ? $class_map[$class_id] : '';
 
   $evals = $results_map[$sid] ?? [];
   $sel_t0 = isset($evals['SEL']['T0']['pct']) ? (int)$evals['SEL']['T0']['pct'] : '';
@@ -221,53 +250,78 @@ foreach ($students as $r) {
   $num_t0 = isset($evals['NUM']['T0']['pct']) ? (int)$evals['NUM']['T0']['pct'] : '';
   $num_t1 = isset($evals['NUM']['T1']['pct']) ? (int)$evals['NUM']['T1']['pct'] : '';
 
-  // Profesor / școală
-  $prof_id   = (int)($r->professor_id ?? 0);
-  $prof      = $prof_id && isset($prof_map[$prof_id]) ? $prof_map[$prof_id] : null;
-  $prof_name = $prof ? ($prof->name ?? '—') : '—';
+  // Profesor
+  $prof_id_raw = (int)($r->professor_id ?? 0);
+  $prof        = $prof_id_raw && isset($prof_map[$prof_id_raw]) ? $prof_map[$prof_id_raw] : null;
+  $prof_name   = $prof ? ($prof->name ?? '') : '';
+  $prof_email  = $prof ? ($prof->email ?? '') : '';
 
-  $school_label='—'; $city_label='—'; $county_label='—';
+  // Școala / Oraș / Județ (derivat din profesor)
+  $school_label=''; $city_label=''; $county_label='';
   if ($prof && !empty($prof->schools)) {
     $primary_sid = (int)$prof->schools[0];
     $more = count($prof->schools) - 1;
     if (isset($school_cache[$primary_sid])) {
       $S = $school_cache[$primary_sid];
       $school_label = (string)$S['name'] . ($more>0 ? ' (+' . $more . ')' : '');
-      $city_label   = $S['city']   ?: '—';
-      $county_label = $S['county'] ?: '—';
+      $city_label   = (string)($S['city']   ?? '');
+      $county_label = (string)($S['county'] ?? '');
     } else {
       $school_label = 'ID #'.$primary_sid . ($more>0 ? ' (+' . $more . ')' : '');
     }
   }
 
   // Generație
-  $gen_id   = (int)($r->generation_id ?? 0);
-  $gen_obj  = $gen_id && isset($gen_map[$gen_id]) ? $gen_map[$gen_id] : null;
-  $gen_name = $gen_obj ? ($gen_obj->name ?: '#'.$gen_id) : '—';
+  $gen_id    = (int)($r->generation_id ?? 0);
+  $gen_obj   = $gen_id && isset($gen_map[$gen_id]) ? $gen_map[$gen_id] : null;
+  $gen_name  = $gen_obj ? ($gen_obj->name  ?: '#'.$gen_id) : '';
+  $gen_year  = $gen_obj ? (string)($gen_obj->year  ?? '') : '';
+  $gen_level = $gen_obj ? (string)($gen_obj->level ?? '') : '';
 
   $csv_rows[] = [
     $sid,
-    $name,
+    $fname,
+    $lname,
+    $full,
     $age,
     $gen,
-    $class,
+    $class_label,
+    $class_id ?: '',
+    $class_name,
 
     $sel_t0, $sel_ti, $sel_t1,
     $lit_t0, $lit_t1,
     $num_t0, $num_t1,
 
-    $r->observation ?? '',
-    $r->notes ?? '',
-    $r->sit_abs ?? '',
-    $r->frecventa ?? '',
-    $r->bursa ?? '',
-    $r->dif_limba ?? '',
+    (string)($r->observation ?? ''),
+    (string)($r->repeta_clasa ?? ''),
+    (string)($r->alte_obs ?? ''),
+    (string)($r->notes ?? ''),
+    (string)($r->sit_abs ?? ''),
+    (string)($r->cauze_abs ?? ''),
+    (string)($r->risc_abandon ?? ''),
+    (string)($r->frecventa ?? ''),
+    (string)($r->bursa ?? ''),
+    (string)($r->dif_limba ?? ''),
+    (string)($r->demers_familie ?? ''),
+    (string)($r->demers_conducere ?? ''),
+    (string)($r->demers_consilier ?? ''),
 
     $school_label,
     $city_label,
     $county_label,
+
+    $prof_id_raw ?: '',
     $prof_name,
+    $prof_email,
+
+    $gen_id ?: '',
     $gen_name,
+    $gen_year,
+    $gen_level,
+
+    (string)($r->created_at ?? ''),
+    (string)($r->updated_at ?? ''),
   ];
 }
 

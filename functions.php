@@ -3038,13 +3038,10 @@ add_action('wp_login', function($user_login, $user){
 
 
 
-/* ===================== Export profesori CSV ===================== */
+/* ===================== Export profesori CSV (handler vechi — DEZACTIVAT; folosim cel din exports/export-teachers.php de la linia ~3648) ===================== */
 
-add_action('admin_post_edus_export_teachers_csv', 'edus_export_teachers_csv');
-add_action('admin_post_nopriv_edus_export_teachers_csv', 'edus_export_teachers_csv'); // va pica pe auth check
-
-if (!function_exists('edus_export_teachers_csv')) {
-  function edus_export_teachers_csv() {
+if (false) {
+  function edus_export_teachers_csv_LEGACY_UNUSED() {
     if (!is_user_logged_in()) {
       wp_die('Autentificare necesară.', 401);
     }
@@ -3644,6 +3641,226 @@ add_action('admin_post_es_export_students', function () {
   exit;
 });
 
+/* =======================================================================
+ * Raport SEL: listează profesorii cu generații într-un an școlar
+ * ======================================================================= */
+add_action('wp_ajax_edu_rap_profesori_by_year', function () {
+  if ( ! isset($_POST['nonce']) || ! wp_verify_nonce($_POST['nonce'], 'edu_nonce') ) {
+    wp_send_json_error(['message' => 'Token invalid.'], 403);
+  }
+  $u = wp_get_current_user();
+  if ( ! current_user_can('manage_options') && ! in_array('tutor', (array)$u->roles, true) ) {
+    wp_send_json_error(['message' => 'Acces restricționat.'], 403);
+  }
+
+  $year = isset($_POST['year']) ? sanitize_text_field(wp_unslash($_POST['year'])) : '';
+  if ($year === '') wp_send_json_error(['message' => 'An școlar lipsă.'], 400);
+
+  $variants = function_exists('es_year_variants') ? es_year_variants($year) : [$year];
+  $variants = array_values(array_unique(array_filter($variants)));
+  if (empty($variants)) wp_send_json_success([]);
+
+  global $wpdb;
+  $tbl_g = $wpdb->prefix . 'edu_generations';
+  $in_ph = implode(',', array_fill(0, count($variants), '%s'));
+  $prof_ids = array_values(array_unique(array_map('intval',
+    (array)$wpdb->get_col($wpdb->prepare(
+      "SELECT DISTINCT professor_id FROM {$tbl_g} WHERE year IN ($in_ph) AND professor_id > 0",
+      ...$variants
+    ))
+  )));
+
+  $out = [];
+  foreach ($prof_ids as $pid) {
+    $uu = get_userdata($pid);
+    if (!$uu) continue;
+    $fn = get_user_meta($pid, 'first_name', true);
+    $ln = get_user_meta($pid, 'last_name',  true);
+    $name = trim(($fn ?: '') . ' ' . ($ln ?: ''));
+    if ($name === '') $name = $uu->display_name ?: $uu->user_login;
+    $out[] = ['pid' => $pid, 'name' => $name];
+  }
+  usort($out, fn($a, $b) => strcasecmp($a['name'], $b['name']));
+  wp_send_json_success($out);
+});
+
+/* =======================================================================
+ * Raport SEL: export CSV cu scoruri SEL per elev, pe capitole + general
+ * Acceptă: an_scolar (string), prof_ids[] (int array, opțional = toți),
+ *          stages[] (sel-t0 / sel-ti / sel-t1).
+ * ======================================================================= */
+add_action('admin_post_es_export_sel_elevi', function () {
+  $u = wp_get_current_user();
+  $is_admin = current_user_can('manage_options');
+  $is_tutor = in_array('tutor', (array)($u->roles ?? []), true);
+  if (!$is_admin && !$is_tutor) { status_header(403); echo 'Acces restricționat.'; exit; }
+
+  if ( ! isset($_POST['_wpnonce']) || ! wp_verify_nonce($_POST['_wpnonce'], 'es_export_sel_elevi') ) {
+    status_header(403); echo 'Nonce invalid.'; exit;
+  }
+  if ( ! function_exists('es_send_csv') ) { status_header(500); echo 'Lipsește es_send_csv().'; exit; }
+
+  $year     = isset($_POST['an_scolar']) ? sanitize_text_field(wp_unslash($_POST['an_scolar'])) : '';
+  $variants = function_exists('es_year_variants') ? es_year_variants($year) : [$year];
+  $variants = array_values(array_unique(array_filter($variants)));
+  if (empty($variants)) { status_header(400); echo 'An școlar invalid.'; exit; }
+
+  $prof_ids = array_values(array_filter(array_map('intval', (array)($_POST['prof_ids'] ?? []))));
+  $stages_raw = (array)($_POST['stages'] ?? []);
+  $stages = array_values(array_intersect(array_map('strval', $stages_raw), ['sel-t0','sel-ti','sel-t1']));
+  if (empty($stages)) $stages = ['sel-t0','sel-ti','sel-t1'];
+
+  // Ensure ordering T0 → Ti → T1 in the CSV.
+  $stage_order = ['sel-t0' => 0, 'sel-ti' => 1, 'sel-t1' => 2];
+  usort($stages, fn($a, $b) => $stage_order[$a] <=> $stage_order[$b]);
+
+  // Capitolele SEL — aceleași etichete ca în raport-generatie-helper-sel.php.
+  $SEL_CHAPTERS = ['Conștientizare de sine','Autoreglare','Conștientizare socială','Relaționare','Luarea deciziilor'];
+  $stage_label = ['sel-t0' => 'T0', 'sel-ti' => 'Ti', 'sel-t1' => 'T1'];
+
+  global $wpdb;
+  $tbl_g = $wpdb->prefix . 'edu_generations';
+  $tbl_s = $wpdb->prefix . 'edu_students';
+  $tbl_r = $wpdb->prefix . 'edu_results';
+
+  // Generațiile din anul școlar (opțional filtrate pe profesori)
+  $in_y = implode(',', array_fill(0, count($variants), '%s'));
+  $params = $variants;
+  $sql_g = "SELECT id, professor_id FROM {$tbl_g} WHERE year IN ($in_y)";
+  if (!empty($prof_ids)) {
+    $in_p = implode(',', array_fill(0, count($prof_ids), '%d'));
+    $sql_g .= " AND professor_id IN ($in_p)";
+    $params = array_merge($params, $prof_ids);
+  }
+  $gens = $wpdb->get_results($wpdb->prepare($sql_g, $params));
+  $gen_ids = array_map(fn($g) => (int)$g->id, $gens);
+
+  // Construim headerele chiar dacă nu avem date — fișier cu 0 rânduri e valid.
+  $headers = ['Nume elev', 'Profesor'];
+  foreach ($stages as $st) {
+    $suf = $stage_label[$st];
+    foreach ($SEL_CHAPTERS as $ch) {
+      $headers[] = 'Scor ' . mb_strtoupper($ch, 'UTF-8') . ' ' . $suf;
+    }
+    $headers[] = 'Scor SEL ' . $suf;
+  }
+
+  if (empty($gen_ids)) {
+    es_send_csv('rezultate-elevi-sel_' . date('Y-m-d_His') . '.csv', $headers, []);
+  }
+
+  // Elevii din acele generații
+  $in_g = implode(',', array_fill(0, count($gen_ids), '%d'));
+  $students = $wpdb->get_results($wpdb->prepare(
+    "SELECT id, first_name, last_name, professor_id FROM {$tbl_s} WHERE generation_id IN ($in_g) ORDER BY last_name, first_name",
+    ...$gen_ids
+  ));
+  if (empty($students)) {
+    es_send_csv('rezultate-elevi-sel_' . date('Y-m-d_His') . '.csv', $headers, []);
+  }
+
+  // Nume profesori
+  $prof_ids_all = array_values(array_unique(array_filter(array_map(fn($s) => (int)$s->professor_id, $students))));
+  $prof_name_map = [];
+  if (!empty($prof_ids_all)) {
+    foreach ($prof_ids_all as $pid) {
+      $uu = get_userdata($pid);
+      if (!$uu) { $prof_name_map[$pid] = '—'; continue; }
+      $fn = get_user_meta($pid, 'first_name', true);
+      $ln = get_user_meta($pid, 'last_name',  true);
+      $name = trim(($fn ?: '') . ' ' . ($ln ?: ''));
+      $prof_name_map[$pid] = $name ?: ($uu->display_name ?: $uu->user_login);
+    }
+  }
+
+  // SEL results pentru acești elevi (cele mai recente per stage/elev)
+  $sid_list = array_map(fn($s) => (int)$s->id, $students);
+  $in_s = implode(',', array_fill(0, count($sid_list), '%d'));
+  $res = $wpdb->get_results($wpdb->prepare(
+    "SELECT id, student_id, modul, results, score, created_at
+     FROM {$tbl_r}
+     WHERE student_id IN ($in_s) AND modul_type='sel'
+     ORDER BY created_at ASC, id ASC",
+    ...$sid_list
+  ));
+
+  // Pentru fiecare (elev, stage) păstrăm cel mai recent rezultat.
+  $latest = []; // [sid][stage] = row
+  foreach ($res as $r) {
+    $m = strtolower(trim((string)$r->modul));
+    $stage = null;
+    if (strpos($m, 'sel-t0') === 0) $stage = 'sel-t0';
+    elseif (strpos($m, 'sel-ti') === 0) $stage = 'sel-ti';
+    elseif (strpos($m, 'sel-t1') === 0) $stage = 'sel-t1';
+    if (!$stage) continue;
+    // Comandă ascendentă → ultimul scris câștigă (adică cel mai recent).
+    $latest[(int)$r->student_id][$stage] = $r;
+  }
+
+  // Parser local pentru hartă capitole → scor, compatibil cu formatul existent.
+  $parse_chapters = function($row, $chapters){
+    $map = array_fill_keys($chapters, null);
+    if (!$row) return $map;
+    $score = $row->score ?? null;
+    if (is_string($score) && function_exists('is_serialized') && is_serialized($score)) {
+      $a = @unserialize($score);
+      if (is_array($a)) {
+        foreach ($chapters as $c) {
+          $map[$c] = (isset($a[$c]) && is_numeric($a[$c])) ? floatval($a[$c]) : null;
+        }
+        return $map;
+      }
+    }
+    $json = json_decode($row->results ?? '', true);
+    if (is_array($json)) {
+      if (isset($json['chapters']) && is_array($json['chapters'])) {
+        foreach ($chapters as $c) {
+          $v = $json['chapters'][$c] ?? null;
+          $map[$c] = is_array($v) ? (is_numeric($v['score'] ?? null) ? floatval($v['score']) : null)
+                                  : (is_numeric($v) ? floatval($v) : null);
+        }
+      } elseif (isset($json['score_breakdown']) && is_array($json['score_breakdown'])) {
+        foreach ($json['score_breakdown'] as $it) {
+          $cap = $it['chapter'] ?? null;
+          if ($cap && in_array($cap, $chapters, true)) {
+            $map[$cap] = is_numeric($it['score'] ?? null) ? floatval($it['score']) : null;
+          }
+        }
+      }
+    }
+    return $map;
+  };
+
+  $fmt = function($v){
+    if ($v === null) return '';
+    return number_format((float)$v, 2, '.', '');
+  };
+
+  $rows = [];
+  foreach ($students as $s) {
+    $sid = (int)$s->id;
+    $full = trim(((string)$s->first_name) . ' ' . ((string)$s->last_name));
+    if ($full === '') $full = '—';
+    $prof_name = $prof_name_map[(int)$s->professor_id] ?? '—';
+
+    $out = [$full, $prof_name];
+    foreach ($stages as $st) {
+      $row = $latest[$sid][$st] ?? null;
+      $map = $parse_chapters($row, $SEL_CHAPTERS);
+      $sum = 0.0; $cnt = 0;
+      foreach ($SEL_CHAPTERS as $ch) {
+        $v = $map[$ch];
+        $out[] = $fmt($v);
+        if ($v !== null) { $sum += $v; $cnt++; }
+      }
+      $out[] = $cnt > 0 ? $fmt($sum / $cnt) : '';
+    }
+    $rows[] = $out;
+  }
+
+  es_send_csv('rezultate-elevi-sel_' . date('Y-m-d_His') . '.csv', $headers, $rows);
+});
+
 // === Export profesori (CSV, full set, fără "Profil") ===
 add_action('admin_post_edus_export_teachers_csv', function () {
   $user     = wp_get_current_user();
@@ -3782,6 +3999,38 @@ function es_level_label_srv($code){
   $code = es_normalize_level_code_srv($code);
   return $map[$code] ?? '—';
 }
+if (!function_exists('es_normalize_year_str')) {
+  /**
+   * Normalize a stored school-year to "YYYY-YYYY" format.
+   * - "2025"       -> "2025-2026"
+   * - "2025-2026"  -> "2025-2026"
+   * - anything else -> trimmed raw
+   */
+  function es_normalize_year_str($raw){
+    $s = trim((string)$raw);
+    if ($s === '') return '';
+    if (preg_match('/^\d{4}$/', $s)) {
+      $y = (int)$s;
+      return $y . '-' . ($y + 1);
+    }
+    return $s;
+  }
+}
+if (!function_exists('es_year_variants')) {
+  /**
+   * Return both the normalized and the raw 4-digit form for a given year,
+   * so DB queries can match rows regardless of how they were stored.
+   * "2025-2026" -> ["2025-2026", "2025"]
+   * "2025"      -> ["2025-2026", "2025"]
+   */
+  function es_year_variants($raw){
+    $norm = es_normalize_year_str($raw);
+    if (preg_match('/^(\d{4})-\d{4}$/', $norm, $m)) {
+      return [$norm, $m[1]];
+    }
+    return $norm !== '' ? [$norm] : [];
+  }
+}
 function es_current_school_year_srv(){
   // WP timezone aware
   $ts = current_time('timestamp');
@@ -3873,6 +4122,27 @@ add_action('wp_ajax_edu_create_generation', function () {
   $exists = $wpdb->get_var( $wpdb->prepare("SHOW TABLES LIKE %s", $table) );
   if ($exists !== $table) {
     wp_send_json_error(['message'=>'Tabela nu există. Reîncarcă adminul ca să ruleze migrarea automată.'], 500);
+  }
+
+  // Un profesor poate avea maxim o generație per an școlar.
+  // Acceptăm ambele forme stocate ("YYYY" și "YYYY-YYYY") pentru a fi compatibili cu date mai vechi.
+  $year_variants = function_exists('es_year_variants') ? es_year_variants($year) : [$year];
+  $year_variants = array_values(array_unique(array_filter($year_variants)));
+  if (!empty($year_variants)) {
+    $in_ph = implode(',', array_fill(0, count($year_variants), '%s'));
+    $existing = $wpdb->get_row($wpdb->prepare(
+      "SELECT id, name FROM {$table} WHERE professor_id = %d AND year IN ($in_ph) LIMIT 1",
+      $professor_id, ...$year_variants
+    ));
+    if ($existing) {
+      wp_send_json_error([
+        'message'       => 'Generație / clasă nu poate fi adăugată; profesorul selectat are asociată o generație/clasă pentru anul școlar selectat.',
+        'code'          => 'duplicate_year',
+        'existing_id'   => (int)$existing->id,
+        'existing_name' => (string)$existing->name,
+        'existing_url'  => home_url('/panou/generatia/' . (int)$existing->id . '/'),
+      ], 409);
+    }
   }
 
   // Inserează doar coloanele care există

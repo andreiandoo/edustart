@@ -61,6 +61,60 @@ if (!function_exists('adg_level_label_norm')) {
     return ucfirst($raw);
   }
 }
+if (!function_exists('adg_resolve_user_ids_by_q')) {
+  /**
+   * Given a free-text query, return the list of user IDs (in $role)
+   * whose display_name / login / email / first_name / last_name match.
+   * Returns [] if nothing matches (caller should treat as "no results").
+   */
+  function adg_resolve_user_ids_by_q($q, $role = 'profesor'){
+    global $wpdb;
+    $q = trim((string)$q);
+    if ($q === '') return [];
+
+    // 1) WP_User_Query with wildcard search on common columns
+    $args = [
+      'role'           => $role,
+      'number'         => 500,
+      'search'         => '*' . esc_attr($q) . '*',
+      'search_columns' => ['user_login','user_email','display_name'],
+      'fields'         => 'ID',
+    ];
+    $uq  = new WP_User_Query($args);
+    $ids = array_map('intval', (array)$uq->get_results());
+
+    // 2) Also match on first_name / last_name meta
+    $like = '%' . $wpdb->esc_like($q) . '%';
+    $meta_ids = $wpdb->get_col($wpdb->prepare("
+      SELECT DISTINCT user_id
+      FROM {$wpdb->usermeta}
+      WHERE ( (meta_key='first_name' AND meta_value LIKE %s)
+           OR (meta_key='last_name'  AND meta_value LIKE %s) )
+      LIMIT 2000
+    ", $like, $like));
+    if (!empty($meta_ids)) {
+      $extra_ids = array_map('intval', (array)$meta_ids);
+      // restrict to role
+      if (!empty($extra_ids)) {
+        $in = implode(',', array_fill(0, count($extra_ids), '%d'));
+        $valid = $wpdb->get_col($wpdb->prepare("
+          SELECT user_id FROM {$wpdb->usermeta}
+          WHERE meta_key='{$wpdb->prefix}capabilities' AND user_id IN ($in)
+        ", ...$extra_ids));
+        $role_hits = [];
+        foreach ($valid as $uid) {
+          $caps = get_user_meta((int)$uid, $wpdb->prefix.'capabilities', true);
+          if (is_array($caps) && array_key_exists($role, $caps)) {
+            $role_hits[] = (int)$uid;
+          }
+        }
+        $ids = array_unique(array_merge($ids, $role_hits));
+      }
+    }
+
+    return array_values(array_unique(array_filter(array_map('intval', $ids))));
+  }
+}
 if (!function_exists('adg_dt')) {
   function adg_dt($ts_or_str){
     if (!$ts_or_str) return '—';
@@ -85,9 +139,37 @@ if (!function_exists('admin_gen_build_cards_all')) {
 
     $s            = trim((string)($filters['s'] ?? ''));
     $year_f       = trim((string)($filters['year'] ?? ''));
-    $level_f      = trim((string)($filters['level'] ?? ''));
+    $level_f      = trim((string)($filters['level'] ?? '')); // legacy single value
+    $level_arr_in = (array)($filters['level_arr'] ?? []);
+    $level_arr_in = array_values(array_filter(array_map(fn($v)=>trim((string)$v), $level_arr_in)));
+    if (empty($level_arr_in) && $level_f !== '') $level_arr_in = [$level_f];
+    $level_labels_norm = [];
+    foreach ($level_arr_in as $lv) {
+      $lbl = adg_level_label_norm($lv);
+      if ($lbl !== '' && $lbl !== '—') $level_labels_norm[mb_strtolower($lbl)] = true;
+    }
+
     $tutor_id_f   = (int)($filters['tutor_id'] ?? 0);
     $prof_id_f    = (int)($filters['professor_id'] ?? 0);
+    $tutor_q      = trim((string)($filters['tutor_q'] ?? ''));
+    $prof_q       = trim((string)($filters['prof_q']  ?? ''));
+
+    // Resolve tutor_q / prof_q to sets of user IDs (search by name + email)
+    $tutor_id_allow = null; // null = no filter
+    $prof_id_allow  = null;
+    if ($tutor_q !== '') {
+      $tutor_id_allow = adg_resolve_user_ids_by_q($tutor_q, 'tutor');
+      if (empty($tutor_id_allow)) {
+        return ['cards'=>[], 'years'=>[], 'levels'=>[], 'total'=>0];
+      }
+    }
+    if ($prof_q !== '') {
+      $prof_id_allow = adg_resolve_user_ids_by_q($prof_q, 'profesor');
+      if (empty($prof_id_allow)) {
+        return ['cards'=>[], 'years'=>[], 'levels'=>[], 'total'=>0];
+      }
+    }
+
     $perpage      = max(5, min(200, (int)($filters['perpage'] ?? 25)));
     $paged        = max(1, (int)($filters['paged'] ?? 1));
     $offset       = ($paged - 1) * $perpage;
@@ -154,6 +236,7 @@ if (!function_exists('admin_gen_build_cards_all')) {
       $students_count = (int)$p->students_count;
 
       if ($prof_id_f && $pid !== $prof_id_f) continue;
+      if (is_array($prof_id_allow) && !in_array($pid, $prof_id_allow, true)) continue;
 
       $gen  = $gen_map[$gid] ?? null;
       $gname= $gen ? (string)$gen->name : '—';
@@ -167,13 +250,14 @@ if (!function_exists('admin_gen_build_cards_all')) {
       $glevel = $gen ? adg_level_label_norm($gen->level ?? '') : '—';
 
       if ($year_f !== '' && (string)$gyear !== (string)$year_f) continue;
-      if ($level_f !== '' && mb_strtolower($glevel) !== mb_strtolower(adg_level_label_norm($level_f))) continue;
+      if (!empty($level_labels_norm) && !isset($level_labels_norm[mb_strtolower($glevel)])) continue;
 
       $uprof = get_user_by('id', $pid);
       $prof_name = adg_user_fullname($uprof);
 
       $tid = (int)($tutor_by_prof[$pid] ?? 0);
       if ($tutor_id_f && $tid !== $tutor_id_f) continue;
+      if (is_array($tutor_id_allow) && !in_array($tid, $tutor_id_allow, true)) continue;
       $utut = $tid ? get_user_by('id', $tid) : null;
       $tutor_name = $tid ? adg_user_fullname($utut) : '—';
 

@@ -28,17 +28,17 @@ $ajax_nonce_teachers   = wp_create_nonce('edu_nonce');
 // Filtre
 $s         = isset($_GET['q']) ? sanitize_text_field(wp_unslash($_GET['q'])) : '';
 $year_f    = isset($_GET['year']) ? sanitize_text_field(wp_unslash($_GET['year'])) : '';
-$level_f   = isset($_GET['level']) ? sanitize_text_field(wp_unslash($_GET['level'])) : '';
-$tutor_id  = isset($_GET['tutor_id']) ? (int)$_GET['tutor_id'] : 0;
-$prof_id   = isset($_GET['professor_id']) ? (int)$_GET['professor_id'] : 0;
+$level_arr = isset($_GET['level']) ? (array) wp_unslash($_GET['level']) : [];
+$level_arr = array_values(array_filter(array_map('sanitize_text_field', $level_arr)));
+$tutor_q   = isset($_GET['tutor_q']) ? sanitize_text_field(wp_unslash($_GET['tutor_q'])) : '';
+$prof_q    = isset($_GET['prof_q'])  ? sanitize_text_field(wp_unslash($_GET['prof_q']))  : '';
 $perpage   = max(5, min(200, (int)($_GET['perpage'] ?? 25)));
 $paged     = max(1, (int)($_GET['paged'] ?? 1));
-$export    = isset($_GET['export']) && $_GET['export']==='csv';
 
 // Colectăm setul
 $bundle = admin_gen_build_cards_all([
-  's'=>$s, 'year'=>$year_f, 'level'=>$level_f,
-  'tutor_id'=>$tutor_id, 'professor_id'=>$prof_id,
+  's'=>$s, 'year'=>$year_f, 'level_arr'=>$level_arr,
+  'tutor_q'=>$tutor_q, 'prof_q'=>$prof_q,
   'perpage'=>$perpage, 'paged'=>$paged,
 ]);
 $cards  = $bundle['cards'];
@@ -69,51 +69,6 @@ if (!empty($cards)) {
   }
 }
 
-// Export CSV (setul filtrat complet, nu doar pagina)
-if ($export) {
-  $filename = 'generatii_admin_'.date('Y-m-d_His').'.csv';
-  header('Content-Type: text/csv; charset=UTF-8');
-  header('Content-Disposition: attachment; filename="'.$filename.'"');
-  $out = fopen('php://output', 'w');
-  fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF)); // BOM
-  fputcsv($out, [
-    'GenID','Nume generație','An','Nivel',
-    'ProfesorID','Profesor','TutorID','Tutor',
-    '#Elevi','Draft','Final',
-    'SEL T0','SEL Ti','SEL T1',
-    'ΔACU T0','ΔACU T1','ΔACU AVG',
-    'ΔCOMP T0','ΔCOMP T1','ΔCOMP AVG',
-    'LIT% T0','LIT% T1','LIT% AVG',
-    'Rem T0','Rem T1','Rem AVG',
-    'Completare SEL T0','Completare SEL Ti','Completare SEL T1',
-    'Creat la'
-  ]);
-
-  // refacem setul fără paginare
-  $all_export = admin_gen_build_cards_all([
-    's'=>$s, 'year'=>$year_f, 'level'=>$level_f,
-    'tutor_id'=>$tutor_id, 'professor_id'=>$prof_id,
-    'perpage'=>999999, 'paged'=>1
-  ])['cards'];
-
-  foreach ($all_export as $r) {
-    fputcsv($out, [
-      (int)$r['gid'], $r['gname'], $r['gyear'], $r['glevel'],
-      (int)$r['pid'], $r['prof_name'], (int)$r['tid'], $r['tutor_name'],
-      (int)$r['students_count'], (int)$r['drafts_count'], (int)$r['finals_count'],
-      round((float)$r['sel_t0'],2), round((float)$r['sel_ti'],2), round((float)$r['sel_t1'],2),
-      round((float)$r['acc_t0_delta'],0), round((float)$r['acc_t1_delta'],0), round((float)$r['acc_avg_delta'],0),
-      round((float)$r['comp_t0_delta'],0), round((float)$r['comp_t1_delta'],0), round((float)$r['comp_avg_delta'],0),
-      round((float)$r['lit_t0_pct'],0), round((float)$r['lit_t1_pct'],0), round((float)$r['lit_avg_pct'],0),
-      (int)$r['rem_t0'], (int)$r['rem_t1'], round((float)$r['rem_avg'],0),
-      round((float)$r['comp_rates']['sel']['t0'],0), round((float)$r['comp_rates']['sel']['ti'],0), round((float)$r['comp_rates']['sel']['t1'],0),
-      adg_dt($r['created_at']),
-    ]);
-  }
-  fclose($out);
-  exit;
-}
-
 // Base URL fără paged/export
 $qs = $_GET; unset($qs['paged'],$qs['export']);
 $base_url = esc_url(add_query_arg($qs, remove_query_arg(['paged','export'])));
@@ -128,7 +83,7 @@ $base_url = esc_url(add_query_arg($qs, remove_query_arg(['paged','export'])));
       <button id="es-open-add-gen" type="button"
         class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md rounded-tl-xl hover:bg-indigo-700">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1 1 0 0 1 1 1v8h8a1 1 0 1 1 0 2h-8v8a1 1 0 1 1-2 0v-8H3a1 1 0 1 1 0-2h8V3a1 1 0 0 1 1-1Z"/></svg>
-        Generație
+        Generație/clasă
       </button>
     </div>
 
@@ -180,35 +135,78 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
               <?php endforeach; ?>
           </select>
           </div>
-          <div class="md:col-span-2">
-          <label class="block mb-1 text-xs font-medium text-slate-600">Nivel</label>
-          <select name="level" id="gen-filter-level" class="w-full px-3 py-2 text-sm bg-white border shadow-sm gen-filter-select rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
-              <option value="">— Oricare —</option>
-              <?php foreach ($levels as $lv): ?>
-              <option value="<?php echo esc_attr($lv); ?>" <?php selected(strtolower($level_f)===strtolower($lv)); ?>><?php echo esc_html($lv); ?></option>
+          <!-- Nivel (multiselect) -->
+          <div class="relative md:col-span-2" id="gen-nivel-wrap">
+            <label class="block mb-1 text-xs font-medium text-slate-600">Nivel</label>
+            <?php
+              $gen_nivel_opts = ['prescolar'=>'Preșcolar','primar'=>'Primar','gimnazial'=>'Gimnazial','liceu'=>'Liceu'];
+            ?>
+            <div id="gen-nivel-inputs">
+              <?php foreach ($level_arr as $v): ?>
+                <input type="hidden" name="level[]" value="<?php echo esc_attr($v); ?>">
               <?php endforeach; ?>
-          </select>
+            </div>
+            <div id="gen-nivel-trigger" class="flex items-center gap-1 w-full min-h-[38px] px-3 py-1.5 text-sm bg-white border shadow-sm rounded-xl border-slate-300 cursor-pointer hover:border-slate-400 flex-wrap">
+              <?php if (empty($level_arr)): ?>
+                <span class="ms-placeholder text-slate-400">— Oricare —</span>
+              <?php else: ?>
+                <?php foreach ($level_arr as $v): ?>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-200 ms-tag" data-val="<?php echo esc_attr($v); ?>">
+                    <?php echo esc_html($gen_nivel_opts[$v] ?? $v); ?>
+                    <button type="button" class="ms-remove hover:text-red-600">&times;</button>
+                  </span>
+                <?php endforeach; ?>
+              <?php endif; ?>
+              <svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+            </div>
+            <div id="gen-nivel-dropdown" class="hidden absolute z-30 w-full mt-1 bg-white border shadow-lg rounded-xl border-slate-200 py-1" style="min-width:200px">
+              <?php foreach ($gen_nivel_opts as $k => $lab): ?>
+                <div class="ms-opt flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-slate-50" data-val="<?php echo esc_attr($k); ?>">
+                  <span class="inline-flex items-center justify-center w-4 h-4 rounded border ms-check <?php echo in_array($k, $level_arr, true) ? 'bg-sky-600 border-sky-600' : 'bg-white border-slate-300'; ?>">
+                    <?php if (in_array($k, $level_arr, true)): ?>
+                      <svg class="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                    <?php endif; ?>
+                  </span>
+                  <span><?php echo esc_html($lab); ?></span>
+                </div>
+              <?php endforeach; ?>
+            </div>
+          </div>
+
+          <div class="md:col-span-2">
+            <label class="block mb-1 text-xs font-medium text-slate-600">Tutor</label>
+            <input type="text" name="tutor_q" id="gen-filter-tutor" value="<?php echo esc_attr($tutor_q); ?>"
+                    placeholder="Nume sau email tutor"
+                    autocomplete="off"
+                    class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
           </div>
           <div class="md:col-span-2">
-          <label class="block mb-1 text-xs font-medium text-slate-600">Tutor ID</label>
-          <input type="number" name="tutor_id" id="gen-filter-tutor" value="<?php echo (int)$tutor_id ?: ''; ?>"
-                  placeholder="ID tutor"
-                  class="w-full px-3 py-2 text-sm bg-white border shadow-sm gen-filter-input rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
+            <label class="block mb-1 text-xs font-medium text-slate-600">Profesor</label>
+            <input type="text" name="prof_q" id="gen-filter-prof" value="<?php echo esc_attr($prof_q); ?>"
+                    placeholder="Nume sau email profesor"
+                    autocomplete="off"
+                    class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
           </div>
-          <div class="md:col-span-2">
-          <label class="block mb-1 text-xs font-medium text-slate-600">Profesor ID</label>
-          <input type="number" name="professor_id" id="gen-filter-prof" value="<?php echo (int)$prof_id ?: ''; ?>"
-                  placeholder="ID profesor"
-                  class="w-full px-3 py-2 text-sm bg-white border shadow-sm gen-filter-input rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
-          </div>
+          <?php $has_filters = ($s !== '' || $year_f !== '' || !empty($level_arr) || $tutor_q !== '' || $prof_q !== ''); ?>
           <div class="flex items-end gap-2 md:col-span-1">
-          <button type="submit" class="inline-flex items-center justify-center w-full gap-2 px-3 py-2 text-sm font-semibold text-white shadow-sm bg-emerald-600 rounded-xl hover:bg-emerald-700">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4">
-                  <path fill-rule="evenodd" d="M3.792 2.938A49.069 49.069 0 0 1 12 2.25c2.797 0 5.54.236 8.209.688a1.857 1.857 0 0 1 1.541 1.836v1.044a3 3 0 0 1-.879 2.121l-6.182 6.182a1.5 1.5 0 0 0-.439 1.061v2.927a3 3 0 0 1-1.658 2.684l-1.757.878A.75.75 0 0 1 9.75 21v-5.818a1.5 1.5 0 0 0-.44-1.06L3.13 7.938a3 3 0 0 1-.879-2.121V4.774c0-.897.64-1.683 1.542-1.836Z" clip-rule="evenodd" />
-              </svg>
-              Filtrează
-          </button>
+            <button type="submit" class="inline-flex items-center justify-center w-full gap-2 px-3 py-2 text-sm font-semibold text-white shadow-sm bg-emerald-600 rounded-xl hover:bg-emerald-700">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4">
+                    <path fill-rule="evenodd" d="M3.792 2.938A49.069 49.069 0 0 1 12 2.25c2.797 0 5.54.236 8.209.688a1.857 1.857 0 0 1 1.541 1.836v1.044a3 3 0 0 1-.879 2.121l-6.182 6.182a1.5 1.5 0 0 0-.439 1.061v2.927a3 3 0 0 1-1.658 2.684l-1.757.878A.75.75 0 0 1 9.75 21v-5.818a1.5 1.5 0 0 0-.44-1.06L3.13 7.938a3 3 0 0 1-.879-2.121V4.774c0-.897.64-1.683 1.542-1.836Z" clip-rule="evenodd" />
+                </svg>
+                Filtrează
+            </button>
           </div>
+          <?php if ($has_filters): ?>
+            <div class="flex items-end gap-2 md:col-span-12">
+              <a href="<?php echo esc_url(remove_query_arg(['q','year','level','tutor_q','prof_q','paged'])); ?>"
+                 class="inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4">
+                  <path fill-rule="evenodd" d="M5.47 5.47a.75.75 0 0 1 1.06 0L12 10.94l5.47-5.47a.75.75 0 1 1 1.06 1.06L13.06 12l5.47 5.47a.75.75 0 1 1-1.06 1.06L12 13.06l-5.47 5.47a.75.75 0 0 1-1.06-1.06L10.94 12 5.47 6.53a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+                </svg>
+                Șterge filtrele
+              </a>
+            </div>
+          <?php endif; ?>
       </form>
     </section>
 
@@ -218,7 +216,7 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
         <div class="p-4 mb-4 text-xs rounded-xl bg-slate-900 text-slate-100">
         <b>DEBUG</b>
         <pre><?php echo esc_html(print_r([
-            'filters'=> compact('s','year_f','level_f','tutor_id','prof_id','perpage','paged'),
+            'filters'=> compact('s','year_f','level_arr','tutor_q','prof_q','perpage','paged'),
             'total'=> $total,
         ], true)); ?></pre>
         </div>
@@ -478,7 +476,7 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
   <div class="relative max-w-2xl mx-auto my-10">
     <div class="mx-4 overflow-hidden bg-white border shadow-xl rounded-2xl border-slate-200">
       <div class="flex items-center justify-between px-5 py-4 border-b bg-slate-50 border-slate-200">
-        <h3 id="es-gen-modal-title" class="text-base font-semibold text-slate-900">Adaugă generație</h3>
+        <h3 id="es-gen-modal-title" class="text-base font-semibold text-slate-900">Adaugă generație/clasă</h3>
         <button type="button" id="es-close-gen" class="p-2 text-slate-500 hover:text-slate-700">
           <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6l12 12M6 18 18 6"/></svg>
         </button>
@@ -489,6 +487,9 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
         <input type="hidden" id="es-gen-id" name="gen_id" value="">
         <input type="hidden" id="es-gen-professor-id" name="professor_id" value="">
         <input type="hidden" id="es-gen-year" name="year" value="">
+
+        <!-- Inline error (duplicate an școlar etc.) -->
+        <div id="es-gen-error" class="hidden mb-3 px-3 py-2 text-sm text-rose-800 bg-rose-50 border border-rose-200 rounded-xl" role="alert"></div>
 
         <div class="grid grid-cols-1 gap-4">
           <!-- Profesor -->
@@ -519,7 +520,7 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
 
           <!-- Nume generație -->
           <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Nume generație</label>
+            <label class="block mb-1 text-xs font-medium text-slate-600">Nume generație/clasă</label>
             <input name="name" id="es-gen-name" type="text" placeholder="ex: G12 — Clasa a V-a A"
                    required class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
           </div>
@@ -535,7 +536,7 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
         <div class="flex items-center justify-end gap-2 pt-5 mt-5 border-t border-slate-200">
           <button type="button" id="es-cancel-gen" class="px-3 py-2 text-sm bg-white border rounded-xl hover:bg-slate-50 border-slate-300">Anulează</button>
           <button id="es-submit-gen" type="submit" class="px-3 py-2 text-sm text-white bg-indigo-600 rounded-xl hover:bg-indigo-700">
-            Salvează generația
+            Salvează generația/clasa
           </button>
         </div>
       </form>
@@ -725,8 +726,35 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
   function setYearAuto(){
     populateYearDropdown();
   }
+
+  // Inline error panel (duplicate year, etc.)
+  const genErrEl = document.getElementById('es-gen-error');
+  function showGenError(msg){
+    if (!genErrEl) return;
+    genErrEl.textContent = msg || '';
+    genErrEl.classList.toggle('hidden', !msg);
+  }
+  function showGenErrorWithLink(msg, url, linkLabel){
+    if (!genErrEl) return;
+    genErrEl.textContent = '';
+    genErrEl.appendChild(document.createTextNode(msg + ' '));
+    if (url && linkLabel) {
+      genErrEl.appendChild(document.createTextNode('Vezi: '));
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.className = 'font-medium underline hover:text-rose-900';
+      a.textContent = linkLabel;
+      genErrEl.appendChild(a);
+    }
+    genErrEl.classList.remove('hidden');
+  }
+  function clearGenError(){ showGenError(''); }
+
   if (genYearDisp) genYearDisp.addEventListener('change', () => {
     if (genYearHid) genYearHid.value = genYearDisp.value;
+    clearGenError();
   });
   function renderLevelAndClasses(code){
     const label = LEVEL_LABEL[code] || '—';
@@ -780,6 +808,7 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
     genLevelClasses.innerHTML = '';
     genTitleEl.textContent = 'Adaugă generație';
     lockProfessorUI(false, '');
+    clearGenError();
     genModal.classList.remove('hidden');
     genName.focus();
   }
@@ -851,6 +880,7 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
           genProfId.value = pid;
           genProfSelected.innerHTML = `<span class="px-2 py-1 text-indigo-800 rounded bg-indigo-50 ring-1 ring-indigo-200">Profesor selectat: ${escapeHtml(b.textContent)} (#${pid})</span>`;
           genProfSuggest.classList.add('hidden'); genProfSuggest.innerHTML='';
+          clearGenError();
           fetchProfessorLevel(pid);
         });
       });
@@ -862,9 +892,10 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
   // submit creare generație
   genForm?.addEventListener('submit', async (e)=>{
     e.preventDefault();
+    clearGenError();
     const pid = (genProfId.value||'').trim();
-    if (!pid) { edusToast('Selectează profesorul.', 'err'); return; }
-    if (!genName.value.trim()) { edusToast('Scrie numele generației.', 'err'); return; }
+    if (!pid) { showGenError('Selectează profesorul.'); return; }
+    if (!genName.value.trim()) { showGenError('Scrie numele generației.'); return; }
 
     const fd = new FormData(genForm);
     fd.append('action', GEN_CREATE_ACTION);
@@ -880,11 +911,16 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
         hideGenModal();
         setTimeout(()=>location.reload(), 500);
       } else {
-        const msg = (resp && resp.data && (resp.data.message||resp.data)) ? (resp.data.message||resp.data) : 'Eroare la salvarea generației.';
-        edusToast(msg, 'err');
+        const d   = (resp && resp.data) ? resp.data : null;
+        const msg = d ? (d.message || (typeof d === 'string' ? d : '')) : '';
+        if (d && d.code === 'duplicate_year' && d.existing_url) {
+          showGenErrorWithLink(msg || 'Generație existentă.', d.existing_url, d.existing_name || ('#' + (d.existing_id || '')));
+        } else {
+          showGenError(msg || 'Eroare la salvarea generației.');
+        }
       }
     }catch(_){
-      edusToast('Eroare de rețea.', 'err');
+      showGenError('Eroare de rețea.');
     }finally{
       genSubmit.disabled=false; genSubmit.innerHTML = old;
     }
@@ -892,98 +928,95 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
 })();
 </script>
 
-<!-- Filtrare locală live -->
+<!-- Nivel multiselect dropdown -->
+<script>
+(function(){
+  const prefix = 'gen-nivel';
+  const inputName = 'level[]';
+  const options = <?php echo wp_json_encode($gen_nivel_opts, JSON_UNESCAPED_UNICODE); ?>;
+  let selected = <?php echo wp_json_encode(array_values($level_arr)); ?>;
+  const placeholder = '— Oricare —';
+
+  const wrap     = document.getElementById(prefix + '-wrap');
+  const trigger  = document.getElementById(prefix + '-trigger');
+  const dropdown = document.getElementById(prefix + '-dropdown');
+  const inputs   = document.getElementById(prefix + '-inputs');
+  if (!wrap || !trigger || !dropdown || !inputs) return;
+
+  const checkSvg = '<svg class="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>';
+  const arrow    = '<svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>';
+
+  function render(){
+    inputs.innerHTML = selected.map(v => `<input type="hidden" name="${inputName}" value="${v}">`).join('');
+    const tags = selected.map(v => {
+      const lab = options[v] || v;
+      return `<span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-200 ms-tag" data-val="${v}">
+        ${lab}<button type="button" class="ms-remove hover:text-red-600">&times;</button></span>`;
+    }).join('');
+    trigger.innerHTML = selected.length ? tags + arrow : `<span class="ms-placeholder text-slate-400">${placeholder}</span>` + arrow;
+    dropdown.querySelectorAll('.ms-opt').forEach(opt => {
+      const v = opt.dataset.val, isOn = selected.includes(v);
+      const box = opt.querySelector('.ms-check');
+      box.className = 'inline-flex items-center justify-center w-4 h-4 rounded border ms-check ' + (isOn ? 'bg-sky-600 border-sky-600' : 'bg-white border-slate-300');
+      box.innerHTML = isOn ? checkSvg : '';
+    });
+  }
+  trigger.addEventListener('click', (e) => {
+    if (e.target.closest('.ms-remove')) {
+      const tag = e.target.closest('.ms-tag');
+      if (tag?.dataset.val) { selected = selected.filter(v => v !== tag.dataset.val); render(); }
+      return;
+    }
+    dropdown.classList.toggle('hidden');
+  });
+  dropdown.addEventListener('click', (e) => {
+    const opt = e.target.closest('.ms-opt');
+    if (!opt) return;
+    const val = opt.dataset.val;
+    if (selected.includes(val)) selected = selected.filter(v => v !== val);
+    else selected.push(val);
+    render();
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#' + prefix + '-wrap')) dropdown.classList.add('hidden');
+  });
+})();
+</script>
+
+<!-- Filtrare locală live (doar pentru q — an, nivel, tutor, profesor = server-side) -->
 <script>
 (function(){
   const form = document.getElementById('gen-filter-form');
   const searchInput = document.getElementById('gen-search-q');
-  const yearSelect = document.getElementById('gen-filter-year');
-  const levelSelect = document.getElementById('gen-filter-level');
-  const tutorInput = document.getElementById('gen-filter-tutor');
-  const profInput = document.getElementById('gen-filter-prof');
   const container = document.getElementById('gen-cards-container');
 
   if (!form || !container) return;
 
   const cards = Array.from(container.querySelectorAll('.gen-card'));
-  const bulkBar = container.previousElementSibling; // bara de bulk actions
+  const bulkBar = container.previousElementSibling;
 
-  // Normalizare text pentru căutare (fără diacritice)
   const norm = (s) => (s || '').toString().toLowerCase()
     .normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
 
-  // Prevenim submit-ul formularului (fix 404)
-  form.addEventListener('submit', function(e) {
-    e.preventDefault();
-    filterCards();
-  });
-
-  // Filtrare la fiecare tastare (cu debounce)
+  // Local search only filters on `q` — other filters reload the page via form submit.
   let debounceTimer = null;
   function debounceFilter() {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(filterCards, 150);
   }
-
   searchInput?.addEventListener('input', debounceFilter);
-  tutorInput?.addEventListener('input', debounceFilter);
-  profInput?.addEventListener('input', debounceFilter);
-
-  // Filtrare imediată la schimbarea selecturilor
-  yearSelect?.addEventListener('change', filterCards);
-  levelSelect?.addEventListener('change', filterCards);
 
   function filterCards() {
     const q = norm(searchInput?.value || '');
-    const year = (yearSelect?.value || '').trim();
-    const level = norm(levelSelect?.value || '');
-    const tutorId = (tutorInput?.value || '').trim();
-    const profId = (profInput?.value || '').trim();
-
     let visibleCount = 0;
-
     cards.forEach(card => {
       const searchBlob = norm(card.getAttribute('data-search') || '');
-      const cardYear = (card.getAttribute('data-year') || '').trim();
-      const cardLevel = norm(card.getAttribute('data-level') || '');
-      const cardTutor = (card.getAttribute('data-tutor') || '').trim();
-      const cardProf = (card.getAttribute('data-prof') || '').trim();
-
-      let show = true;
-
-      // Filtrare după text căutare
-      if (q && !searchBlob.includes(q)) {
-        show = false;
-      }
-
-      // Filtrare după an
-      if (show && year && cardYear !== year) {
-        show = false;
-      }
-
-      // Filtrare după nivel
-      if (show && level && cardLevel !== level) {
-        show = false;
-      }
-
-      // Filtrare după tutor ID
-      if (show && tutorId && cardTutor !== tutorId && tutorId !== '0') {
-        show = false;
-      }
-
-      // Filtrare după profesor ID
-      if (show && profId && cardProf !== profId && profId !== '0') {
-        show = false;
-      }
-
+      const show = !q || searchBlob.includes(q);
       card.style.display = show ? '' : 'none';
       if (show) visibleCount++;
     });
-
-    // Actualizare mesaj dacă nu există rezultate
     updateNoResultsMessage(visibleCount);
 
-    // Reset selecție bulk
     const selectAll = document.getElementById('gen-select-all');
     if (selectAll) selectAll.checked = false;
     document.querySelectorAll('.gen-select').forEach(cb => cb.checked = false);
@@ -991,7 +1024,6 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
     if (bulkCount) bulkCount.textContent = '0 selectate';
   }
 
-  // Gestionare mesaj "Nu există rezultate"
   let noResultsEl = null;
   function updateNoResultsMessage(count) {
     if (count === 0 && cards.length > 0) {
@@ -1004,19 +1036,14 @@ window.__AJAX_NONCE_TEACHERS = '<?php echo esc_js( $ajax_nonce_teachers ); ?>';
           <p class="mt-2 text-slate-600">Ajustează filtrele sau caută după nume profesor/tutor/gen.</p>
         `;
       }
-      if (!container.contains(noResultsEl)) {
-        container.appendChild(noResultsEl);
-      }
+      if (!container.contains(noResultsEl)) container.appendChild(noResultsEl);
       if (bulkBar) bulkBar.style.display = 'none';
     } else {
-      if (noResultsEl && container.contains(noResultsEl)) {
-        container.removeChild(noResultsEl);
-      }
+      if (noResultsEl && container.contains(noResultsEl)) container.removeChild(noResultsEl);
       if (bulkBar) bulkBar.style.display = '';
     }
   }
 
-  // Rulează o dată la încărcare (pentru filtre din URL)
   filterCards();
 })();
 </script>

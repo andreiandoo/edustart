@@ -85,11 +85,11 @@ function es_user_fullname($u){
 $s          = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
 $nivel_arr  = isset($_GET['nivel']) ? array_filter(array_map('sanitize_text_field', (array)wp_unslash($_GET['nivel']))) : [];
 $statut     = isset($_GET['statut']) ? sanitize_text_field(wp_unslash($_GET['statut'])) : '';
-$gen_year   = isset($_GET['gen_year']) ? sanitize_text_field(wp_unslash($_GET['gen_year'])) : '';
-$county_f   = isset($_GET['county']) ? sanitize_text_field(wp_unslash($_GET['county'])) : '';
+$gen_year   = isset($_GET['gen_year']) ? es_normalize_year_str(sanitize_text_field(wp_unslash($_GET['gen_year']))) : '';
+$county_f   = isset($_GET['county']) ? array_filter(array_map('sanitize_text_field', (array)wp_unslash($_GET['county']))) : [];
 $an_program = isset($_GET['an_program']) ? sanitize_text_field(wp_unslash($_GET['an_program'])) : '';
-$rsoi       = isset($_GET['rsoi']) ? sanitize_text_field(wp_unslash($_GET['rsoi'])) : '';
-$tutor_f    = isset($_GET['tutor']) ? (int)$_GET['tutor'] : 0;
+$rsoi       = isset($_GET['rsoi']) ? array_filter(array_map('sanitize_text_field', (array)wp_unslash($_GET['rsoi']))) : [];
+$tutor_f    = isset($_GET['tutor']) ? array_filter(array_map('intval', (array)$_GET['tutor'])) : [];
 
 $perpage    = max(5, min(200, (int)($_GET['perpage'] ?? 25)));
 $paged      = max(1, (int)($_GET['paged'] ?? 1));
@@ -122,11 +122,11 @@ if ($statut !== '') {
 if ($an_program !== '') {
   $meta_query[] = ['key' => 'an_program', 'value' => $an_program, 'compare' => '='];
 }
-if ($rsoi !== '') {
-  $meta_query[] = ['key' => 'segment_rsoi', 'value' => $rsoi, 'compare' => '='];
+if (!empty($rsoi)) {
+  $meta_query[] = ['key' => 'segment_rsoi', 'value' => $rsoi, 'compare' => 'IN'];
 }
-if ($tutor_f > 0) {
-  $meta_query[] = ['key' => 'assigned_tutor_id', 'value' => $tutor_f, 'compare' => '=', 'type' => 'NUMERIC'];
+if (!empty($tutor_f)) {
+  $meta_query[] = ['key' => 'assigned_tutor_id', 'value' => $tutor_f, 'compare' => 'IN', 'type' => 'NUMERIC'];
 }
 
 $args = [
@@ -174,7 +174,7 @@ if (!empty($prof_ids)) {
     $pid = (int)$g->professor_id;
     if (!isset($gens_by_prof[$pid])) $gens_by_prof[$pid] = [];
     $gens_by_prof[$pid][] = $g;
-    $yr = trim((string)$g->year);
+    $yr = es_normalize_year_str($g->year ?? '');
     if ($yr !== '') $years_available[$yr] = true;
   }
 
@@ -290,7 +290,7 @@ if ($gen_year !== '') {
     $has = false;
     if (!empty($gens_by_prof[$pid])) {
       foreach ($gens_by_prof[$pid] as $g) {
-        if ((string)$g->year === (string)$gen_year) { $has = true; break; }
+        if (es_normalize_year_str($g->year ?? '') === (string)$gen_year) { $has = true; break; }
       }
     }
     if ($has) $by_year[] = $u;
@@ -298,13 +298,13 @@ if ($gen_year !== '') {
   $filtered = $by_year;
 }
 
-// Filtru: Județ
-if ($county_f !== '') {
+// Filtru: Județ (multiselect)
+if (!empty($county_f)) {
   $by_cty = [];
   foreach ($filtered as $u) {
     $pid = (int)$u->ID;
     $ctys = $counties_by_prof[$pid] ?? [];
-    if (in_array($county_f, $ctys, true)) $by_cty[] = $u;
+    if (!empty(array_intersect($county_f, $ctys))) $by_cty[] = $u;
   }
   $filtered = $by_cty;
 }
@@ -408,7 +408,7 @@ $COLS = [
       <button id="es-open-add-gen" type="button"
       class="inline-flex items-center gap-2 px-3 py-2 ml-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1 1 0 0 1 1 1v8h8a1 1 0 1 1 0 2h-8v8a1 1 0 1 1-2 0v-8H3a1 1 0 1 1 0-2h8V3a1 1 0 0 1 1-1Z"/></svg>
-        Generație
+        Generație/clasă
       </button>
     </div>
 
@@ -506,7 +506,7 @@ $COLS = [
             <div>
               <label class="block mb-1 text-xs font-medium text-slate-600">Email (va fi și user_login)</label>
               <div class="relative">
-                <input name="email" id="es-prof-email" type="email" required class="w-full px-3 py-2 pr-9 text-sm bg-white border rounded-xl border-slate-300">
+                <input name="email" id="es-prof-email" type="email" required class="w-full px-3 py-2 text-sm bg-white border pr-9 rounded-xl border-slate-300">
                 <span id="es-email-ok" class="absolute hidden -translate-y-1/2 right-3 top-1/2 text-emerald-500">
                   <svg class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4-4a.75.75 0 011.06-1.06l3.366 3.365 7.506-9.879a.75.75 0 011.052-.143z" clip-rule="evenodd"/></svg>
                 </span>
@@ -650,7 +650,7 @@ $COLS = [
                     <svg class="w-4 h-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
                   </div>
                   <input type="hidden" id="es-school-city" name="_city_filter" value="">
-                  <div id="es-city-dropdown" class="hidden absolute z-30 w-full mt-1 bg-white border shadow-lg rounded-xl border-slate-200" style="min-width:220px">
+                  <div id="es-city-dropdown" class="absolute z-30 hidden w-full mt-1 bg-white border shadow-lg rounded-xl border-slate-200" style="min-width:220px">
                     <div class="p-2 border-b border-slate-100">
                       <input id="es-city-dd-search" type="text" placeholder="Caută oraș..."
                              class="w-full px-3 py-1.5 text-sm bg-white border rounded-lg border-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-500">
@@ -665,7 +665,7 @@ $COLS = [
                     <span class="text-slate-500">— Selectează școli —</span>
                     <svg class="w-4 h-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
                   </div>
-                  <div id="es-school-dropdown" class="hidden absolute z-30 w-full mt-1 bg-white border shadow-lg rounded-xl border-slate-200" style="min-width:320px">
+                  <div id="es-school-dropdown" class="absolute z-30 hidden w-full mt-1 bg-white border shadow-lg rounded-xl border-slate-200" style="min-width:320px">
                     <div class="p-2 border-b border-slate-100">
                       <input id="es-school-dd-search" type="text" placeholder="Caută școală..."
                              class="w-full px-3 py-1.5 text-sm bg-white border rounded-lg border-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-500">
@@ -684,7 +684,7 @@ $COLS = [
           <p id="es-current-avatar" class="hidden"></p>
         </div>
 
-        <div class="flex items-center justify-end gap-2 px-5 py-4 border-t shrink-0 bg-white border-slate-200 rounded-b-2xl">
+        <div class="flex items-center justify-end gap-2 px-5 py-4 bg-white border-t shrink-0 border-slate-200 rounded-b-2xl">
           <button type="button" id="es-cancel-prof" class="px-3 py-2 text-sm bg-white border rounded-xl hover:bg-slate-50 border-slate-300">Anulează</button>
           <button id="es-submit-prof" type="submit" class="px-3 py-2 text-sm text-white rounded-xl bg-emerald-600 hover:bg-emerald-700">
             Salvează
@@ -701,7 +701,7 @@ $COLS = [
   <div class="relative max-w-2xl mx-auto my-10">
     <div class="mx-4 overflow-hidden bg-white border shadow-xl rounded-2xl border-slate-200">
       <div class="flex items-center justify-between px-5 py-4 border-b bg-slate-50 border-slate-200">
-        <h3 id="es-gen-modal-title" class="text-base font-semibold text-slate-900">Adaugă generație</h3>
+        <h3 id="es-gen-modal-title" class="text-base font-semibold text-slate-900">Adaugă generație/clasă</h3>
         <button type="button" id="es-close-gen" class="p-2 text-slate-500 hover:text-slate-700">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -715,6 +715,9 @@ $COLS = [
         <input type="hidden" id="es-gen-professor-id" name="professor_id" value="">
         <!-- we send 'year' too, but server oricum îl recalculă/validatează -->
         <input type="hidden" id="es-gen-year" name="year" value="">
+
+        <!-- Inline error (duplicate an școlar etc.) -->
+        <div id="es-gen-error" class="hidden px-3 py-2 mb-3 text-sm border text-rose-800 bg-rose-50 border-rose-200 rounded-xl" role="alert"></div>
 
         <div class="grid grid-cols-1 gap-4">
           <!-- 1) Profesor (obligatoriu) -->
@@ -747,9 +750,9 @@ $COLS = [
             </div>
           </div>
 
-          <!-- 4) Nume generație -->
+          <!-- 4) Nume generație/clasă -->
           <div>
-            <label class="block mb-1 text-xs font-medium text-slate-600">Nume generație</label>
+            <label class="block mb-1 text-xs font-medium text-slate-600">Nume generație/clasă</label>
             <input name="name" id="es-gen-name" type="text" placeholder="ex: G12 — Clasa a V-a A"
                    required class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
           </div>
@@ -765,7 +768,7 @@ $COLS = [
         <div class="flex items-center justify-end gap-2 pt-5 mt-5 border-t border-slate-200">
           <button type="button" id="es-cancel-gen" class="px-3 py-2 text-sm bg-white border rounded-xl hover:bg-slate-50 border-slate-300">Anulează</button>
           <button id="es-submit-gen" type="submit" class="px-3 py-2 text-sm text-white bg-indigo-600 rounded-xl hover:bg-indigo-700">
-            Salvează generația
+            Salvează generația/clasa
           </button>
         </div>
       </form>
@@ -835,7 +838,7 @@ $COLS = [
         <?php endif; ?>
         <svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </div>
-      <div id="prof-nivel-dropdown" class="hidden absolute z-30 w-full mt-1 bg-white border shadow-lg rounded-xl border-slate-200 py-1" style="min-width:200px">
+      <div id="prof-nivel-dropdown" class="absolute z-30 hidden w-full py-1 mt-1 bg-white border shadow-lg rounded-xl border-slate-200" style="min-width:200px">
         <?php foreach ($prof_nivel_opts as $k => $lab): ?>
           <div class="ms-opt flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-slate-50" data-val="<?php echo esc_attr($k); ?>">
             <span class="inline-flex items-center justify-center w-4 h-4 rounded border ms-check <?php echo in_array($k, $nivel_arr, true) ? 'bg-sky-600 border-sky-600' : 'bg-white border-slate-300'; ?>">
@@ -862,7 +865,7 @@ $COLS = [
 
     <!-- An generație -->
     <div class="md:col-span-1">
-      <label class="block mb-1 text-xs font-medium text-slate-600">An generație</label>
+      <label class="block mb-1 text-xs font-medium text-slate-600">An generație/clasă</label>
       <select name="gen_year" class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
         <option value="" class="text-xs">— Oricare —</option>
         <?php foreach ($years_list as $yr): ?>
@@ -871,15 +874,42 @@ $COLS = [
       </select>
     </div>
 
-    <!-- Județ -->
-    <div class="md:col-span-1">
+    <!-- Județ (multiselect cu căutare) -->
+    <div class="relative md:col-span-1" id="prof-county-wrap">
       <label class="block mb-1 text-xs font-medium text-slate-600">Județ</label>
-      <select name="county" class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
-        <option value="" class="text-xs">— Orice județ —</option>
-        <?php foreach ($county_list as $nm): ?>
-          <option value="<?php echo esc_attr($nm); ?>" <?php selected($county_f===$nm); ?>><?php echo esc_html($nm); ?></option>
+      <div id="prof-county-inputs">
+        <?php foreach ($county_f as $v): ?>
+          <input type="hidden" name="county[]" value="<?php echo esc_attr($v); ?>">
         <?php endforeach; ?>
-      </select>
+      </div>
+      <div id="prof-county-trigger" class="flex items-center gap-1 w-full min-h-[38px] px-3 py-1.5 text-sm bg-white border shadow-sm rounded-xl border-slate-300 cursor-pointer hover:border-slate-400 flex-wrap">
+        <?php if (empty($county_f)): ?>
+          <span class="ms-placeholder text-slate-400">— Orice —</span>
+        <?php else: ?>
+          <?php foreach ($county_f as $v): ?>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-200 ms-tag" data-val="<?php echo esc_attr($v); ?>">
+              <?php echo esc_html($v); ?>
+              <button type="button" class="ms-remove hover:text-red-600">&times;</button>
+            </span>
+          <?php endforeach; ?>
+        <?php endif; ?>
+        <svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </div>
+      <div id="prof-county-dropdown" class="absolute z-30 hidden w-full py-1 mt-1 overflow-y-auto bg-white border shadow-lg rounded-xl border-slate-200 max-h-60" style="min-width:220px">
+        <div class="px-2 py-1 border-b border-slate-100">
+          <input id="prof-county-search" type="text" placeholder="Caută județ..." class="w-full px-2 py-1 text-sm bg-white border rounded-lg border-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-500">
+        </div>
+        <?php foreach ($county_list as $nm): ?>
+          <div class="ms-opt flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-slate-50" data-val="<?php echo esc_attr($nm); ?>">
+            <span class="inline-flex items-center justify-center w-4 h-4 rounded border ms-check <?php echo in_array($nm, $county_f, true) ? 'bg-sky-600 border-sky-600' : 'bg-white border-slate-300'; ?>">
+              <?php if (in_array($nm, $county_f, true)): ?>
+                <svg class="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <?php endif; ?>
+            </span>
+            <span><?php echo esc_html($nm); ?></span>
+          </div>
+        <?php endforeach; ?>
+      </div>
     </div>
 
     <!-- An program (nou) -->
@@ -893,26 +923,87 @@ $COLS = [
       </select>
     </div>
 
-    <!-- RSOI (nou) -->
-    <div class="md:col-span-1">
+    <!-- RSOI (multiselect cu căutare) -->
+    <div class="relative md:col-span-1" id="prof-rsoi-wrap">
       <label class="block mb-1 text-xs font-medium text-slate-600">RSOI</label>
-      <select name="rsoi" class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
-        <option value="" class="text-xs">— Toate —</option>
-        <?php foreach ($rsoi_list as $rv): ?>
-          <option value="<?php echo esc_attr($rv); ?>" <?php selected($rsoi===$rv); ?>><?php echo esc_html($rv); ?></option>
+      <div id="prof-rsoi-inputs">
+        <?php foreach ($rsoi as $v): ?>
+          <input type="hidden" name="rsoi[]" value="<?php echo esc_attr($v); ?>">
         <?php endforeach; ?>
-      </select>
+      </div>
+      <div id="prof-rsoi-trigger" class="flex items-center gap-1 w-full min-h-[38px] px-3 py-1.5 text-sm bg-white border shadow-sm rounded-xl border-slate-300 cursor-pointer hover:border-slate-400 flex-wrap">
+        <?php if (empty($rsoi)): ?>
+          <span class="ms-placeholder text-slate-400">— Toate —</span>
+        <?php else: ?>
+          <?php foreach ($rsoi as $v): ?>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-200 ms-tag" data-val="<?php echo esc_attr($v); ?>">
+              <?php echo esc_html($v); ?>
+              <button type="button" class="ms-remove hover:text-red-600">&times;</button>
+            </span>
+          <?php endforeach; ?>
+        <?php endif; ?>
+        <svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </div>
+      <div id="prof-rsoi-dropdown" class="absolute z-30 hidden w-full py-1 mt-1 overflow-y-auto bg-white border shadow-lg rounded-xl border-slate-200 max-h-60" style="min-width:220px">
+        <div class="px-2 py-1 border-b border-slate-100">
+          <input id="prof-rsoi-search" type="text" placeholder="Caută RSOI..." class="w-full px-2 py-1 text-sm bg-white border rounded-lg border-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-500">
+        </div>
+        <?php foreach ($rsoi_list as $rv): ?>
+          <div class="ms-opt flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-slate-50" data-val="<?php echo esc_attr($rv); ?>">
+            <span class="inline-flex items-center justify-center w-4 h-4 rounded border ms-check <?php echo in_array($rv, $rsoi, true) ? 'bg-sky-600 border-sky-600' : 'bg-white border-slate-300'; ?>">
+              <?php if (in_array($rv, $rsoi, true)): ?>
+                <svg class="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <?php endif; ?>
+            </span>
+            <span><?php echo esc_html($rv); ?></span>
+          </div>
+        <?php endforeach; ?>
+      </div>
     </div>
 
-    <!-- Tutor -->
-    <div class="md:col-span-1">
+    <!-- Tutor (multiselect cu căutare) -->
+    <div class="relative md:col-span-1" id="prof-tutor-wrap">
       <label class="block mb-1 text-xs font-medium text-slate-600">Tutor</label>
-      <select name="tutor" class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-700 focus:border-transparent">
-        <option value="" class="text-xs">— Toți —</option>
-        <?php foreach ($all_tutors as $t): ?>
-          <option value="<?php echo (int)$t->ID; ?>" <?php selected($tutor_f===(int)$t->ID); ?>><?php echo esc_html(es_user_fullname($t)); ?></option>
+      <div id="prof-tutor-inputs">
+        <?php foreach ($tutor_f as $v): ?>
+          <input type="hidden" name="tutor[]" value="<?php echo (int)$v; ?>">
         <?php endforeach; ?>
-      </select>
+      </div>
+      <div id="prof-tutor-trigger" class="flex items-center gap-1 w-full min-h-[38px] px-3 py-1.5 text-sm bg-white border shadow-sm rounded-xl border-slate-300 cursor-pointer hover:border-slate-400 flex-wrap">
+        <?php if (empty($tutor_f)): ?>
+          <span class="ms-placeholder text-slate-400">— Toți —</span>
+        <?php else: ?>
+          <?php
+            $_tutor_labels = [];
+            foreach ($all_tutors as $t) $_tutor_labels[(int)$t->ID] = es_user_fullname($t);
+          ?>
+          <?php foreach ($tutor_f as $v): ?>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-200 ms-tag" data-val="<?php echo (int)$v; ?>">
+              <?php echo esc_html($_tutor_labels[$v] ?? "#$v"); ?>
+              <button type="button" class="ms-remove hover:text-red-600">&times;</button>
+            </span>
+          <?php endforeach; ?>
+        <?php endif; ?>
+        <svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </div>
+      <div id="prof-tutor-dropdown" class="absolute z-30 hidden w-full py-1 mt-1 overflow-y-auto bg-white border shadow-lg rounded-xl border-slate-200 max-h-60" style="min-width:240px">
+        <div class="px-2 py-1 border-b border-slate-100">
+          <input id="prof-tutor-search" type="text" placeholder="Caută tutor..." class="w-full px-2 py-1 text-sm bg-white border rounded-lg border-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-500">
+        </div>
+        <?php foreach ($all_tutors as $t):
+          $tid = (int)$t->ID;
+          $tname = es_user_fullname($t);
+        ?>
+          <div class="ms-opt flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-slate-50" data-val="<?php echo $tid; ?>">
+            <span class="inline-flex items-center justify-center w-4 h-4 rounded border ms-check <?php echo in_array($tid, $tutor_f, true) ? 'bg-sky-600 border-sky-600' : 'bg-white border-slate-300'; ?>">
+              <?php if (in_array($tid, $tutor_f, true)): ?>
+                <svg class="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <?php endif; ?>
+            </span>
+            <span><?php echo esc_html($tname); ?></span>
+          </div>
+        <?php endforeach; ?>
+      </div>
     </div>
 
     <!-- Export + Perpage -->
@@ -948,16 +1039,16 @@ $COLS = [
     <table class="relative w-full text-sm table-auto" id="prof-table">
       <thead class="sticky top-0 bg-sky-800 backdrop-blur">
         <tr class="text-white">
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200 cursor-pointer select-none hover:bg-sky-900" data-sort="profesor">
+          <th class="px-3 py-3 font-semibold text-left border-b cursor-pointer select-none border-slate-200 hover:bg-sky-900" data-sort="profesor">
             <span class="inline-flex items-center gap-1">Profesor <svg class="w-3 h-3 opacity-40 es-sort-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"/></svg></span>
           </th>
           <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="tutor">Tutor</th>
           <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="cod">Cod SLF</th>
           <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="statut">Statut</th>
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200 cursor-pointer select-none hover:bg-sky-900" data-col="nivel" data-sort="nivel">
+          <th class="px-3 py-3 font-semibold text-left border-b cursor-pointer select-none border-slate-200 hover:bg-sky-900" data-col="nivel" data-sort="nivel">
             <span class="inline-flex items-center gap-1">Nivel <svg class="w-3 h-3 opacity-40 es-sort-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"/></svg></span>
           </th>
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200 cursor-pointer select-none hover:bg-sky-900" data-col="anprog" data-sort="anprog">
+          <th class="px-3 py-3 font-semibold text-left border-b cursor-pointer select-none border-slate-200 hover:bg-sky-900" data-col="anprog" data-sort="anprog">
             <span class="inline-flex items-center gap-1">An program <svg class="w-3 h-3 opacity-40 es-sort-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"/></svg></span>
           </th>
           <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="rsoi">RSOI</th>
@@ -968,7 +1059,7 @@ $COLS = [
           <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="judet">Județ</th>
           <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="last">Ultima activitate</th>
           <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="reg">Înregistrare</th>
-          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="generatii">Generații</th>
+          <th class="px-3 py-3 font-semibold text-left border-b border-slate-200" data-col="generatii">Generații/clase</th>
           <th class="px-3 py-3 font-semibold text-center border-b border-slate-200" data-col="act1">Profil</th>
         </tr>
       </thead>
@@ -1306,21 +1397,16 @@ $COLS = [
   </div>
 <?php endif; ?>
 
-<!-- JS: Nivel multiselect dropdown -->
+<!-- JS: Multiselect dropdowns (Nivel, Județ, RSOI, Tutor) -->
 <script>
-(function(){
-  const prefix = 'prof-nivel';
-  const inputName = 'nivel[]';
-  const options = <?php echo wp_json_encode($prof_nivel_opts, JSON_UNESCAPED_UNICODE); ?>;
-  let selected = <?php echo wp_json_encode(array_values($nivel_arr)); ?>;
-  const placeholder = '— Oricare —';
-
+function profInitMultiselect(prefix, inputName, options, initialSelected, placeholder) {
   const wrap     = document.getElementById(prefix + '-wrap');
   const trigger  = document.getElementById(prefix + '-trigger');
   const dropdown = document.getElementById(prefix + '-dropdown');
   const inputs   = document.getElementById(prefix + '-inputs');
   if (!wrap || !trigger || !dropdown || !inputs) return;
 
+  let selected = [...initialSelected];
   const checkSvg = '<svg class="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>';
   const arrow = '<svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>';
 
@@ -1358,7 +1444,61 @@ $COLS = [
   document.addEventListener('click', (e) => {
     if (!e.target.closest('#' + prefix + '-wrap')) dropdown.classList.add('hidden');
   });
-})();
+
+  // Optional search input
+  const searchInput = document.getElementById(prefix + '-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', function(){
+      const q = this.value.toLowerCase().trim();
+      dropdown.querySelectorAll('.ms-opt').forEach(opt => {
+        const txt = (opt.textContent || '').toLowerCase();
+        opt.style.display = (!q || txt.includes(q)) ? '' : 'none';
+      });
+    });
+    searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+    searchInput.addEventListener('click', (e) => e.stopPropagation());
+  }
+}
+
+// Init Nivel
+profInitMultiselect('prof-nivel', 'nivel[]',
+  <?php echo wp_json_encode($prof_nivel_opts, JSON_UNESCAPED_UNICODE); ?>,
+  <?php echo wp_json_encode(array_values($nivel_arr)); ?>,
+  '— Oricare —'
+);
+
+// Init Județ
+profInitMultiselect('prof-county', 'county[]',
+  <?php
+    $_c_map = [];
+    foreach ($county_list as $nm) $_c_map[$nm] = $nm;
+    echo wp_json_encode($_c_map, JSON_UNESCAPED_UNICODE);
+  ?>,
+  <?php echo wp_json_encode(array_values($county_f), JSON_UNESCAPED_UNICODE); ?>,
+  '— Orice —'
+);
+
+// Init RSOI
+profInitMultiselect('prof-rsoi', 'rsoi[]',
+  <?php
+    $_r_map = [];
+    foreach ($rsoi_list as $rv) $_r_map[$rv] = $rv;
+    echo wp_json_encode($_r_map, JSON_UNESCAPED_UNICODE);
+  ?>,
+  <?php echo wp_json_encode(array_values($rsoi), JSON_UNESCAPED_UNICODE); ?>,
+  '— Toate —'
+);
+
+// Init Tutor
+profInitMultiselect('prof-tutor', 'tutor[]',
+  <?php
+    $_t_map = [];
+    foreach ($all_tutors as $t) $_t_map[(string)$t->ID] = es_user_fullname($t);
+    echo wp_json_encode($_t_map, JSON_UNESCAPED_UNICODE);
+  ?>,
+  <?php echo wp_json_encode(array_map('strval', $tutor_f)); ?>,
+  '— Toți —'
+);
 </script>
 
 <!-- JS: toggle coloane (persistă în localStorage) -->
@@ -1725,7 +1865,7 @@ $COLS = [
       const loc = [item.city, item.county].filter(Boolean).join(' / ');
       row.innerHTML = `
         <input type="hidden" name="assigned_school_ids[]" value="${item.id}">
-        <div class="flex items-center gap-2 min-w-0">
+        <div class="flex items-center min-w-0 gap-2">
           <svg class="w-4 h-4 shrink-0 text-sky-600" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 1.5 9 12 15 22.5 9 12 3Z"/><path d="M3 10.5v5.25L12 21l9-5.25V10.5" opacity=".4"/></svg>
           <span class="font-medium truncate text-sky-900">${escapeHtml(item.name||('Școală #'+item.id))}</span>
           ${loc ? `<span class="text-xs truncate text-sky-600">${escapeHtml(loc)}</span>` : ''}
@@ -2171,9 +2311,36 @@ $COLS = [
       if (genYearHid) genYearHid.value = genYearDisp.value;
     }
 
-    // Sync hidden field when dropdown changes
+    // Inline error helpers (for the "Adaugă generație" modal)
+    const genErrEl = document.getElementById('es-gen-error');
+    function showGenError(msg){
+      if (!genErrEl) return;
+      genErrEl.textContent = msg || '';
+      genErrEl.classList.toggle('hidden', !msg);
+    }
+    // Render error + a link to an existing entity (safe: uses textContent for label).
+    function showGenErrorWithLink(msg, url, linkLabel){
+      if (!genErrEl) return;
+      genErrEl.textContent = '';
+      genErrEl.appendChild(document.createTextNode(msg + ' '));
+      if (url && linkLabel) {
+        genErrEl.appendChild(document.createTextNode('Vezi: '));
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.className = 'font-medium underline hover:text-rose-900';
+        a.textContent = linkLabel;
+        genErrEl.appendChild(a);
+      }
+      genErrEl.classList.remove('hidden');
+    }
+    function clearGenError(){ showGenError(''); }
+
+    // Sync hidden field when dropdown changes; clear error since the attempted year changed
     genYearDisp?.addEventListener('change', () => {
       if (genYearHid) genYearHid.value = genYearDisp.value;
+      clearGenError();
     });
 
     function setYearAuto(){
@@ -2232,9 +2399,10 @@ $COLS = [
       setYearAuto();
       genLevelRO.textContent = '—';
       genLevelClasses.innerHTML = '';
-      genTitleEl.textContent = 'Adaugă generație';
+      genTitleEl.textContent = 'Adaugă generație/clasă';
       lockProfessorUI(false, '');
       genProfSuggest.classList.add('hidden'); genProfSuggest.innerHTML = '';
+      clearGenError();
       genModal.classList.remove('hidden');
       genName.focus();
     }
@@ -2261,7 +2429,7 @@ $COLS = [
           ? `<span class="px-2 py-1 text-indigo-800 rounded bg-indigo-50 ring-1 ring-indigo-200">Profesor: ${escapeHtml(pname)} (#${pid})</span>`
           : `<span class="px-2 py-1 text-indigo-800 rounded bg-indigo-50 ring-1 ring-indigo-200">Profesor selectat: #${pid}</span>`
         );
-        genTitleEl.textContent = 'Alocă generație';
+        genTitleEl.textContent = 'Alocă generație/clasă';
         genModal.classList.remove('hidden');
         genName.focus();
       });
@@ -2305,6 +2473,7 @@ $COLS = [
             genProfId.value = pid;
             genProfSelected.innerHTML = `<span class="px-2 py-1 text-indigo-800 rounded bg-indigo-50 ring-1 ring-indigo-200">Profesor selectat: ${escapeHtml(b.textContent)} (#${pid})</span>`;
             genProfSuggest.classList.add('hidden'); genProfSuggest.innerHTML='';
+            clearGenError();
             fetchProfessorLevel(pid);
           });
         });
@@ -2316,9 +2485,10 @@ $COLS = [
     // Submit
     genForm?.addEventListener('submit', async (e)=>{
       e.preventDefault();
+      clearGenError();
       const pid = (genProfId.value||'').trim();
-      if (!pid) { toast('Selectează profesorul.', 'err'); return; }
-      if (!genName.value.trim()) { toast('Scrie numele generației.', 'err'); return; }
+      if (!pid) { showGenError('Selectează profesorul.'); return; }
+      if (!genName.value.trim()) { showGenError('Scrie numele generației/clasei.'); return; }
 
       const fd = new FormData(genForm);
       fd.append('action', GEN_CREATE_ACTION);
@@ -2331,15 +2501,20 @@ $COLS = [
         let resp={};
         try{ resp = JSON.parse(txt); } catch(e){ resp = {success:false, data:{message:txt}}; }
         if(resp && resp.success){
-          toast('Generație salvată.', 'ok');
+          toast('Generație/clasă salvată.', 'ok');
           hideGenModal();
           setTimeout(()=>location.reload(), 500);
         } else {
-          const msg = (resp && resp.data && (resp.data.message||resp.data)) ? (resp.data.message||resp.data) : 'Eroare la salvarea generației.';
-          toast(msg, 'err');
+          const d   = (resp && resp.data) ? resp.data : null;
+          const msg = d ? (d.message || (typeof d === 'string' ? d : '')) : '';
+          if (d && d.code === 'duplicate_year' && d.existing_url) {
+            showGenErrorWithLink(msg || 'Generație/clasă existentă.', d.existing_url, d.existing_name || ('#' + (d.existing_id || '')));
+          } else {
+            showGenError(msg || 'Eroare la salvarea generației/clasei.');
+          }
         }
       }catch(_){
-        toast('Eroare de rețea.', 'err');
+        showGenError('Eroare de rețea.');
       }finally{
         genSubmit.disabled=false; genSubmit.innerHTML = old;
       }

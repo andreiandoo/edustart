@@ -27,6 +27,7 @@ $all_menu = [
   'scoli'       => ['label' => 'Școli', 'href' => home_url('/panou/scoli'),       'icon' => 'building'],
   'chestionare' => ['label' => 'Chestionare',    'href' => home_url('/panou/chestionare'), 'icon' => 'clipboard-list'],
   'rapoarte'    => ['label' => 'Rapoarte',      'href' => home_url('/panou/rapoarte'),    'icon' => 'chart-bar'],
+  'analiza'     => ['label' => 'Analiză',       'href' => home_url('/panou/analiza'),     'icon' => 'clipboard-list'],
   'utilizatori' => ['label' => 'Utilizatori',      'href' => home_url('/panou/utilizatori'),    'icon' => 'users'],
   'profil'      => ['label' => 'Profil',         'href' => home_url('/panou/profil'),      'icon' => 'user'],
   'notificari'      => ['label' => 'Notificări',         'href' => home_url('/panou/notificari'),      'icon' => 'bell'],
@@ -36,9 +37,9 @@ $all_menu = [
 
 /** Filtrare după rol */
 if ( current_user_can('manage_options') ) {
-  $visible_keys = ['dashboard','elevi','generatii','profesori','scoli','rapoarte','utilizatori','profil','notificari','setari','optiuni'];
+  $visible_keys = ['dashboard','elevi','generatii','profesori','scoli','rapoarte','analiza','utilizatori','profil','notificari','setari','optiuni'];
 } elseif ( in_array('tutor', $user_roles, true) ) {
-  $visible_keys = ['dashboard','generatii','profesori','rapoarte','setari'];
+  $visible_keys = ['dashboard','generatii','profesori','rapoarte','analiza','setari'];
 } elseif ( in_array('profesor', $user_roles, true) ) {
   $visible_keys = ['dashboard','lista','evaluari','profil','setari'];
 } else {

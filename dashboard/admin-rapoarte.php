@@ -45,6 +45,21 @@ if (!function_exists('rap_delta_badge_class')) {
     return 'bg-gray-100 text-gray-700';
   }
 }
+if (!function_exists('rap_pct_pill')) {
+  // Completion pill — aceeași cromatică ca pe /panou/generatii/
+  // Marker class "rap-cell-pct" este folosită de CSV exporter ca să poată extrage valoarea separat.
+  function rap_pct_pill($pct){
+    if ($pct === null) return '<span class="rap-cell-pct inline-flex px-2 py-0.5 text-xs rounded bg-slate-200 text-slate-700">—</span>';
+    $v = max(0, min(100, floatval($pct)));
+    if     ($v < 40)  $cls = 'bg-red-600 text-white font-bold';
+    elseif ($v < 60)  $cls = 'bg-orange-400 text-white font-bold';
+    elseif ($v < 75)  $cls = 'bg-yellow-300 text-slate-800 font-bold';
+    elseif ($v < 90)  $cls = 'bg-lime-500 text-slate-800 font-bold';
+    elseif ($v < 100) $cls = 'bg-lime-600 text-white font-bold';
+    else              $cls = 'bg-green-500 text-white font-bold';
+    return '<span class="rap-cell-pct inline-flex items-center px-2 py-0.5 text-xs rounded '.$cls.'">'.intval(round($v)).'%</span>';
+  }
+}
 
 /* ==================== FILTRE ==================== */
 
@@ -53,15 +68,22 @@ $now_m = (int) date('n');
 $now_y = (int) date('Y');
 $default_year = ($now_m >= 8) ? "$now_y-" . ($now_y + 1) : ($now_y - 1) . "-$now_y";
 
-$year_filter   = isset($_GET['an_scolar']) ? sanitize_text_field($_GET['an_scolar']) : $default_year;
+$year_filter   = isset($_GET['an_scolar']) ? es_normalize_year_str(sanitize_text_field($_GET['an_scolar'])) : $default_year;
 $tutor_filter  = isset($_GET['tutor']) ? array_filter(array_map('intval', (array)$_GET['tutor'])) : [];
 $nivel_filter  = isset($_GET['nivel']) ? array_filter(array_map('sanitize_text_field', (array)$_GET['nivel'])) : [];
 $judet_filter  = isset($_GET['judet']) ? array_filter(array_map('sanitize_text_field', (array)$_GET['judet'])) : [];
 $report_type   = isset($_GET['tip']) ? sanitize_text_field($_GET['tip']) : 'sel';
 if (!in_array($report_type, ['sel', 'lit'], true)) $report_type = 'sel';
 
-// Anii școlari disponibili (din generații)
-$years_available = $wpdb->get_col("SELECT DISTINCT year FROM {$tbl_generations} WHERE year != '' ORDER BY year DESC");
+// Anii școlari disponibili (din generații) — normalizăm ca să nu apară "2025" separat de "2025-2026"
+$years_raw = $wpdb->get_col("SELECT DISTINCT year FROM {$tbl_generations} WHERE year != '' ORDER BY year DESC");
+$years_set = [];
+foreach ((array)$years_raw as $yr) {
+  $n = es_normalize_year_str($yr);
+  if ($n !== '') $years_set[$n] = true;
+}
+krsort($years_set, SORT_NATURAL);
+$years_available = array_keys($years_set);
 
 // Lista tutorilor
 $all_tutors = get_users([
@@ -84,9 +106,15 @@ $all_counties_list = $wpdb->get_col("SELECT DISTINCT j.name FROM {$tbl_counties}
 
 /* ==================== DATA LOADING ==================== */
 
-// 1) Generații din anul selectat
-$gen_where = $wpdb->prepare("WHERE year = %s", $year_filter);
-$generations = $wpdb->get_results("SELECT * FROM {$tbl_generations} {$gen_where} ORDER BY professor_id, id");
+// 1) Generații din anul selectat (acceptăm ambele forme stocate: "YYYY" și "YYYY-YYYY")
+$year_variants = es_year_variants($year_filter);
+if (!empty($year_variants)) {
+  $in_ph = implode(',', array_fill(0, count($year_variants), '%s'));
+  $gen_where = $wpdb->prepare("WHERE year IN ($in_ph)", ...$year_variants);
+  $generations = $wpdb->get_results("SELECT * FROM {$tbl_generations} {$gen_where} ORDER BY professor_id, id");
+} else {
+  $generations = [];
+}
 
 // 2) Colectăm profesori unici
 $prof_ids_raw = array_unique(array_filter(array_map(fn($g) => (int)$g->professor_id, $generations)));
@@ -244,6 +272,8 @@ if (!empty($prof_ids)) {
     $student_count = count($prof_student_ids);
 
     $t0_avg = null; $ti_avg = null; $t1_avg = null;
+    $t0_pct = null; $ti_pct = null; $t1_pct = null;
+    $t0_done = 0;   $ti_done = 0;   $t1_done = 0;
 
     if ($report_type === 'sel') {
       // SEL: medii pe capitole
@@ -258,6 +288,15 @@ if (!empty($prof_ids)) {
       $t0_avg = edus_array_avg_non_null(edus_sel_avg_by_chapters($by_stage['sel-t0'], $SEL_CHAPTERS));
       $ti_avg = edus_array_avg_non_null(edus_sel_avg_by_chapters($by_stage['sel-ti'], $SEL_CHAPTERS));
       $t1_avg = edus_array_avg_non_null(edus_sel_avg_by_chapters($by_stage['sel-t1'], $SEL_CHAPTERS));
+      // Rate de completare (câți elevi din generațiile profesorului au completat fiecare stadiu)
+      $t0_done = count($by_stage['sel-t0']);
+      $ti_done = count($by_stage['sel-ti']);
+      $t1_done = count($by_stage['sel-t1']);
+      if ($student_count > 0) {
+        $t0_pct = 100.0 * $t0_done / $student_count;
+        $ti_pct = 100.0 * $ti_done / $student_count;
+        $t1_pct = 100.0 * $t1_done / $student_count;
+      }
     } else {
       // LIT: total_pct per student, medie pe T0 și T1 (nu are Ti)
       $lit_t0_pcts = []; $lit_t1_pcts = [];
@@ -294,6 +333,12 @@ if (!empty($prof_ids)) {
       't0'           => $t0_avg,
       'ti'           => $ti_avg,
       't1'           => $t1_avg,
+      't0_pct'       => $t0_pct,
+      'ti_pct'       => $ti_pct,
+      't1_pct'       => $t1_pct,
+      't0_done'      => $t0_done,
+      'ti_done'      => $ti_done,
+      't1_done'      => $t1_done,
       'delta'        => $delta,
     ];
   }
@@ -308,19 +353,30 @@ foreach ($report_data as $d) {
   $tid = $d['tutor_id'] ?? 0;
   $tname = $d['tutor'];
   if (!isset($tutor_agg[$tid])) {
-    $tutor_agg[$tid] = ['name' => $tname, 'profs' => 0, 'students' => 0, 't0_vals' => [], 'ti_vals' => [], 't1_vals' => []];
+    $tutor_agg[$tid] = [
+      'name' => $tname, 'profs' => 0, 'students' => 0,
+      't0_vals' => [], 'ti_vals' => [], 't1_vals' => [],
+      't0_done' => 0, 'ti_done' => 0, 't1_done' => 0,
+    ];
   }
   $tutor_agg[$tid]['profs']++;
   $tutor_agg[$tid]['students'] += $d['students'];
   if ($d['t0'] !== null) $tutor_agg[$tid]['t0_vals'][] = $d['t0'];
   if ($d['ti'] !== null) $tutor_agg[$tid]['ti_vals'][] = $d['ti'];
   if ($d['t1'] !== null) $tutor_agg[$tid]['t1_vals'][] = $d['t1'];
+  $tutor_agg[$tid]['t0_done'] += (int)($d['t0_done'] ?? 0);
+  $tutor_agg[$tid]['ti_done'] += (int)($d['ti_done'] ?? 0);
+  $tutor_agg[$tid]['t1_done'] += (int)($d['t1_done'] ?? 0);
 }
 foreach ($tutor_agg as &$ta) {
   $ta['t0'] = count($ta['t0_vals']) ? array_sum($ta['t0_vals']) / count($ta['t0_vals']) : null;
   $ta['ti'] = count($ta['ti_vals']) ? array_sum($ta['ti_vals']) / count($ta['ti_vals']) : null;
   $ta['t1'] = count($ta['t1_vals']) ? array_sum($ta['t1_vals']) / count($ta['t1_vals']) : null;
   $ta['delta'] = ($ta['t1'] !== null && $ta['t0'] !== null) ? ($ta['t1'] - $ta['t0']) : null;
+  // Rate de completare pe tutor (total elevi completați / total elevi)
+  $ta['t0_pct'] = $ta['students'] > 0 ? 100.0 * $ta['t0_done'] / $ta['students'] : null;
+  $ta['ti_pct'] = $ta['students'] > 0 ? 100.0 * $ta['ti_done'] / $ta['students'] : null;
+  $ta['t1_pct'] = $ta['students'] > 0 ? 100.0 * $ta['t1_done'] / $ta['students'] : null;
 }
 unset($ta);
 uasort($tutor_agg, fn($a, $b) => strcasecmp($a['name'], $b['name']));
@@ -331,14 +387,25 @@ $chart_t0 = array_map(fn($d) => $d['t0'] !== null ? round($d['t0'], 2) : null, $
 $chart_ti = array_map(fn($d) => $d['ti'] !== null ? round($d['ti'], 2) : null, $report_data);
 $chart_t1 = array_map(fn($d) => $d['t1'] !== null ? round($d['t1'], 2) : null, $report_data);
 
-// Per-professor data for JS (tutor-filtered charts)
+// Per-professor data for JS (tutor-filtered charts / prof multiselect)
 $prof_chart_data = array_values(array_map(fn($d) => [
+  'pid'      => (string)($d['pid'] ?? 0),
   'name'     => $d['name'],
   'tutor_id' => (string)($d['tutor_id'] ?? 0),
   't0'       => $d['t0'] !== null ? round($d['t0'], 2) : null,
   'ti'       => $d['ti'] !== null ? round($d['ti'], 2) : null,
   't1'       => $d['t1'] !== null ? round($d['t1'], 2) : null,
 ], $report_data));
+
+// Lista profesori pentru dropdown multiselect (chart + tabel per profesor)
+$chart_prof_list = [];
+foreach ($report_data as $d) {
+  $pid = (string)($d['pid'] ?? 0);
+  if ($pid && !isset($chart_prof_list[$pid])) {
+    $chart_prof_list[$pid] = $d['name'];
+  }
+}
+uksort($chart_prof_list, fn($a, $b) => strcasecmp($chart_prof_list[$a], $chart_prof_list[$b]));
 
 // Tutor list for chart dropdown (id => name, from actual data)
 $chart_tutor_list = [];
@@ -512,6 +579,11 @@ foreach ($all_tutors as $tu) {
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M21 21 15 15m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z"/></svg>
         Filtrează
       </button>
+      <button type="button" id="rap-open-export-elevi"
+              class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white shadow-sm rounded-xl bg-sky-600 hover:bg-sky-700">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+        Exportă rezultate elevi
+      </button>
       <?php
         $has_filters = !empty($tutor_filter) || !empty($nivel_filter) || !empty($judet_filter) || $year_filter !== $default_year || $report_type !== 'sel';
         if ($has_filters):
@@ -538,8 +610,48 @@ foreach ($all_tutors as $tu) {
 
 <!-- Chart per profesor -->
 <section class="p-6 mx-6 mt-6 bg-white border rounded-2xl border-slate-200">
-  <h2 class="mb-4 text-lg font-semibold text-slate-800">Scoruri <?php echo esc_html($report_label); ?> per profesor</h2>
-  <div style="max-height:400px;">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+    <h2 class="text-lg font-semibold text-slate-800">Scoruri <?php echo esc_html($report_label); ?> per profesor</h2>
+    <div class="flex flex-wrap items-center gap-2">
+      <!-- Prof multiselect (filter pentru grafic, tabel & export) -->
+      <div class="relative" id="chart-prof-wrap">
+        <div id="chart-prof-trigger" class="flex items-center gap-1 min-w-[240px] min-h-[36px] px-3 py-1.5 text-sm bg-white border shadow-sm rounded-xl border-slate-300 cursor-pointer hover:border-slate-400 flex-wrap">
+          <span class="ms-placeholder text-slate-400">Toți profesorii</span>
+          <svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+        </div>
+        <div id="chart-prof-dropdown" class="hidden absolute right-0 z-30 mt-1 bg-white border shadow-lg rounded-xl border-slate-200 py-1 max-h-72 overflow-y-auto" style="min-width:280px">
+          <div class="px-2 pb-2 pt-1 sticky top-0 bg-white border-b border-slate-100">
+            <input type="text" id="chart-prof-search" placeholder="Caută profesor..."
+                   class="w-full px-2 py-1 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-sky-500">
+          </div>
+          <?php foreach ($chart_prof_list as $ppid => $pname): ?>
+            <div class="cp-opt flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-slate-50"
+                 data-val="<?php echo esc_attr($ppid); ?>"
+                 data-name="<?php echo esc_attr(mb_strtolower(remove_accents((string)$pname))); ?>">
+              <span class="inline-flex items-center justify-center w-4 h-4 rounded border cp-check bg-sky-600 border-sky-600">
+                <svg class="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              </span>
+              <span><?php echo esc_html($pname); ?></span>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      </div>
+
+      <button type="button" id="rap-toggle-prof-chart" data-target="sel-chart-wrap"
+              class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200"
+              aria-expanded="false">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+        <span class="rap-toggle-label">Arată grafic</span>
+      </button>
+      <button type="button" id="rap-export-prof"
+              data-table="rap-table" data-filename="scoruri-<?php echo esc_attr(strtolower($report_label)); ?>-per-profesor"
+              class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+        Export Scoruri <?php echo esc_html($report_label); ?> per profesor
+      </button>
+    </div>
+  </div>
+  <div id="sel-chart-wrap" class="hidden" style="max-height:400px;">
     <canvas id="sel-chart"></canvas>
   </div>
 </section>
@@ -559,23 +671,27 @@ foreach ($all_tutors as $tu) {
           <th class="px-3 py-3 font-semibold text-center cursor-pointer select-none hover:bg-sky-900" data-sort="students">
             <span class="inline-flex items-center gap-1">Elevi <svg class="w-3 h-3 opacity-40" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"/></svg></span>
           </th>
-          <th class="px-3 py-3 font-semibold text-center cursor-pointer select-none hover:bg-sky-900" data-sort="t0">
+          <th class="px-3 py-3 font-semibold text-center cursor-pointer select-none hover:bg-sky-900" data-sort="t0"<?php if ($report_type === 'sel'): ?> data-csv-split="1"<?php endif; ?>>
             <span class="inline-flex items-center gap-1"><?php echo esc_html($report_label); ?> T0 <svg class="w-3 h-3 opacity-40" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"/></svg></span>
           </th>
           <?php if ($has_ti): ?>
-          <th class="px-3 py-3 font-semibold text-center cursor-pointer select-none hover:bg-sky-900" data-sort="ti">
+          <th class="px-3 py-3 font-semibold text-center cursor-pointer select-none hover:bg-sky-900" data-sort="ti"<?php if ($report_type === 'sel'): ?> data-csv-split="1"<?php endif; ?>>
             <span class="inline-flex items-center gap-1"><?php echo esc_html($report_label); ?> Ti <svg class="w-3 h-3 opacity-40" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"/></svg></span>
           </th>
           <?php endif; ?>
-          <th class="px-3 py-3 font-semibold text-center cursor-pointer select-none hover:bg-sky-900" data-sort="t1">
+          <th class="px-3 py-3 font-semibold text-center cursor-pointer select-none hover:bg-sky-900" data-sort="t1"<?php if ($report_type === 'sel'): ?> data-csv-split="1"<?php endif; ?>>
             <span class="inline-flex items-center gap-1"><?php echo esc_html($report_label); ?> T1 <svg class="w-3 h-3 opacity-40" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"/></svg></span>
           </th>
+          <?php if ($report_type !== 'sel'): ?>
           <th class="px-3 py-3 font-semibold text-center">Δ (T1−T0)</th>
+          <?php endif; ?>
         </tr>
       </thead>
       <tbody class="divide-y divide-slate-200">
         <?php foreach ($report_data as $d): ?>
           <tr class="transition-colors hover:bg-slate-50"
+              data-pid="<?php echo (int)$d['pid']; ?>"
+              data-tid="<?php echo (int)($d['tutor_id'] ?? 0); ?>"
               data-name="<?php echo esc_attr($d['name']); ?>"
               data-students="<?php echo (int)$d['students']; ?>"
               data-t0="<?php echo $d['t0'] !== null ? round($d['t0'], 4) : ''; ?>"
@@ -602,27 +718,37 @@ foreach ($all_tutors as $tu) {
             <td class="px-3 py-3 text-center text-slate-800"><?php echo (int)$d['students']; ?></td>
             <td class="px-3 py-3 text-center">
               <?php if ($d['t0'] !== null): ?>
-                <span class="inline-block px-2 py-1 text-xs rounded <?php echo esc_attr(rap_bg_score_class($d['t0'])); ?>"><?php echo number_format($d['t0'], 2); ?></span>
+                <div class="inline-flex items-center gap-1.5">
+                  <span class="rap-cell-score inline-block px-2 py-1 text-xs rounded <?php echo esc_attr(rap_bg_score_class($d['t0'])); ?>"><?php echo number_format($d['t0'], 2); ?></span>
+                  <?php if ($report_type === 'sel'): ?><?php echo rap_pct_pill($d['t0_pct'] ?? null); ?><?php endif; ?>
+                </div>
               <?php else: ?>
-                <span class="text-slate-400">—</span>
+                <span class="rap-cell-score text-slate-400">—</span>
               <?php endif; ?>
             </td>
             <?php if ($has_ti): ?>
             <td class="px-3 py-3 text-center">
               <?php if ($d['ti'] !== null): ?>
-                <span class="inline-block px-2 py-1 text-xs rounded <?php echo esc_attr(rap_bg_score_class($d['ti'])); ?>"><?php echo number_format($d['ti'], 2); ?></span>
+                <div class="inline-flex items-center gap-1.5">
+                  <span class="rap-cell-score inline-block px-2 py-1 text-xs rounded <?php echo esc_attr(rap_bg_score_class($d['ti'])); ?>"><?php echo number_format($d['ti'], 2); ?></span>
+                  <?php if ($report_type === 'sel'): ?><?php echo rap_pct_pill($d['ti_pct'] ?? null); ?><?php endif; ?>
+                </div>
               <?php else: ?>
-                <span class="text-slate-400">—</span>
+                <span class="rap-cell-score text-slate-400">—</span>
               <?php endif; ?>
             </td>
             <?php endif; ?>
             <td class="px-3 py-3 text-center">
               <?php if ($d['t1'] !== null): ?>
-                <span class="inline-block px-2 py-1 text-xs rounded <?php echo esc_attr(rap_bg_score_class($d['t1'])); ?>"><?php echo number_format($d['t1'], 2); ?></span>
+                <div class="inline-flex items-center gap-1.5">
+                  <span class="rap-cell-score inline-block px-2 py-1 text-xs rounded <?php echo esc_attr(rap_bg_score_class($d['t1'])); ?>"><?php echo number_format($d['t1'], 2); ?></span>
+                  <?php if ($report_type === 'sel'): ?><?php echo rap_pct_pill($d['t1_pct'] ?? null); ?><?php endif; ?>
+                </div>
               <?php else: ?>
-                <span class="text-slate-400">—</span>
+                <span class="rap-cell-score text-slate-400">—</span>
               <?php endif; ?>
             </td>
+            <?php if ($report_type !== 'sel'): ?>
             <td class="px-3 py-3 text-center">
               <?php if ($d['delta'] !== null): ?>
                 <span class="inline-block px-2 py-1 text-xs rounded <?php echo esc_attr(rap_delta_badge_class($d['delta'])); ?>">
@@ -632,6 +758,7 @@ foreach ($all_tutors as $tu) {
                 <span class="text-slate-400">—</span>
               <?php endif; ?>
             </td>
+            <?php endif; ?>
           </tr>
         <?php endforeach; ?>
       </tbody>
@@ -643,26 +770,47 @@ foreach ($all_tutors as $tu) {
 <section class="p-6 mx-6 mt-4 bg-white border rounded-2xl border-slate-200">
   <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
     <h2 class="text-lg font-semibold text-slate-800">Scoruri <?php echo esc_html($report_label); ?> per tutor</h2>
-    <!-- Inline tutor filter for charts -->
-    <div class="relative" id="chart-tutor-wrap">
-      <div id="chart-tutor-trigger" class="flex items-center gap-1 min-w-[200px] min-h-[36px] px-3 py-1.5 text-sm bg-white border shadow-sm rounded-xl border-slate-300 cursor-pointer hover:border-slate-400 flex-wrap">
-        <span class="ms-placeholder text-slate-400">Toți tutorii</span>
-        <svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
-      </div>
-      <div id="chart-tutor-dropdown" class="hidden absolute right-0 z-30 mt-1 bg-white border shadow-lg rounded-xl border-slate-200 py-1 max-h-60 overflow-y-auto" style="min-width:260px">
-        <?php foreach ($chart_tutor_list as $tid => $tlab): ?>
-          <div class="ct-opt flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-slate-50" data-val="<?php echo esc_attr($tid); ?>">
-            <span class="inline-flex items-center justify-center w-4 h-4 rounded border ct-check bg-sky-600 border-sky-600">
-              <svg class="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-            </span>
-            <span><?php echo esc_html($tlab); ?></span>
+    <div class="flex flex-wrap items-center gap-2">
+      <!-- Inline tutor filter -->
+      <div class="relative" id="chart-tutor-wrap">
+        <div id="chart-tutor-trigger" class="flex items-center gap-1 min-w-[240px] min-h-[36px] px-3 py-1.5 text-sm bg-white border shadow-sm rounded-xl border-slate-300 cursor-pointer hover:border-slate-400 flex-wrap">
+          <span class="ms-placeholder text-slate-400">Toți tutorii</span>
+          <svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+        </div>
+        <div id="chart-tutor-dropdown" class="hidden absolute right-0 z-30 mt-1 bg-white border shadow-lg rounded-xl border-slate-200 py-1 max-h-72 overflow-y-auto" style="min-width:280px">
+          <div class="px-2 pb-2 pt-1 sticky top-0 bg-white border-b border-slate-100">
+            <input type="text" id="chart-tutor-search" placeholder="Caută tutor..."
+                   class="w-full px-2 py-1 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-sky-500">
           </div>
-        <?php endforeach; ?>
+          <?php foreach ($chart_tutor_list as $tid => $tlab): ?>
+            <div class="ct-opt flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-slate-50"
+                 data-val="<?php echo esc_attr($tid); ?>"
+                 data-name="<?php echo esc_attr(mb_strtolower(remove_accents((string)$tlab))); ?>">
+              <span class="inline-flex items-center justify-center w-4 h-4 rounded border ct-check bg-sky-600 border-sky-600">
+                <svg class="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              </span>
+              <span><?php echo esc_html($tlab); ?></span>
+            </div>
+          <?php endforeach; ?>
+        </div>
       </div>
+
+      <button type="button" id="rap-toggle-tutor-chart" data-target="tutor-chart-wrap"
+              class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200"
+              aria-expanded="false">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+        <span class="rap-toggle-label">Arată grafic</span>
+      </button>
+      <button type="button" id="rap-export-tutor"
+              data-table="rap-tutor-table" data-filename="scoruri-<?php echo esc_attr(strtolower($report_label)); ?>-per-tutor"
+              class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+        Export Scoruri <?php echo esc_html($report_label); ?> per tutor
+      </button>
     </div>
   </div>
 
-  <div class="space-y-6">
+  <div id="tutor-chart-wrap" class="hidden space-y-6">
     <div>
       <h3 class="mb-2 text-sm font-medium text-slate-600">Avg. T0</h3>
       <div style="height:300px;"><canvas id="tutor-chart-t0"></canvas></div>
@@ -683,23 +831,32 @@ foreach ($all_tutors as $tu) {
 <!-- Tutor aggregation table -->
 <section class="px-6 pb-4 mt-4">
   <div class="bg-white border shadow-sm rounded-2xl border-slate-200">
-    <table class="w-full text-sm">
+    <table class="w-full text-sm" id="rap-tutor-table">
       <thead class="sticky top-[52px] z-10 bg-indigo-800 text-white">
         <tr>
           <th class="px-3 py-3 font-semibold text-left">Tutor</th>
           <th class="px-3 py-3 font-semibold text-center">Profesori</th>
           <th class="px-3 py-3 font-semibold text-center">Elevi</th>
-          <th class="px-3 py-3 font-semibold text-center"><?php echo esc_html($report_label); ?> T0</th>
+          <th class="px-3 py-3 font-semibold text-center"<?php if ($report_type === 'sel'): ?> data-csv-split="1"<?php endif; ?>><?php echo esc_html($report_label); ?> T0</th>
           <?php if ($has_ti): ?>
-          <th class="px-3 py-3 font-semibold text-center"><?php echo esc_html($report_label); ?> Ti</th>
+          <th class="px-3 py-3 font-semibold text-center"<?php if ($report_type === 'sel'): ?> data-csv-split="1"<?php endif; ?>><?php echo esc_html($report_label); ?> Ti</th>
           <?php endif; ?>
-          <th class="px-3 py-3 font-semibold text-center"><?php echo esc_html($report_label); ?> T1</th>
+          <th class="px-3 py-3 font-semibold text-center"<?php if ($report_type === 'sel'): ?> data-csv-split="1"<?php endif; ?>><?php echo esc_html($report_label); ?> T1</th>
+          <?php if ($report_type !== 'sel'): ?>
           <th class="px-3 py-3 font-semibold text-center">Δ (T1−T0)</th>
+          <?php endif; ?>
         </tr>
       </thead>
       <tbody class="divide-y divide-slate-200">
         <?php foreach ($tutor_agg as $tid => $ta): ?>
-          <tr class="transition-colors hover:bg-slate-50">
+          <tr class="transition-colors hover:bg-slate-50"
+              data-tid="<?php echo (int)$tid; ?>"
+              data-name="<?php echo esc_attr($ta['name']); ?>"
+              data-profs="<?php echo (int)$ta['profs']; ?>"
+              data-students="<?php echo (int)$ta['students']; ?>"
+              data-t0="<?php echo $ta['t0'] !== null ? round($ta['t0'], 4) : ''; ?>"
+              data-ti="<?php echo $ta['ti'] !== null ? round($ta['ti'], 4) : ''; ?>"
+              data-t1="<?php echo $ta['t1'] !== null ? round($ta['t1'], 4) : ''; ?>">
             <td class="px-3 py-3 font-medium text-slate-900">
               <?php if ($tid > 0): ?>
                 <a href="<?php echo esc_url(home_url('/panou/tutor/' . $tid)); ?>" class="hover:text-indigo-700"><?php echo esc_html($ta['name']); ?></a>
@@ -711,21 +868,31 @@ foreach ($all_tutors as $tu) {
             <td class="px-3 py-3 text-center text-slate-800"><?php echo (int)$ta['students']; ?></td>
             <td class="px-3 py-3 text-center">
               <?php if ($ta['t0'] !== null): ?>
-                <span class="inline-block px-2 py-1 text-xs rounded <?php echo esc_attr(rap_bg_score_class($ta['t0'])); ?>"><?php echo number_format($ta['t0'], 2); ?></span>
-              <?php else: ?><span class="text-slate-400">—</span><?php endif; ?>
+                <div class="inline-flex items-center gap-1.5">
+                  <span class="rap-cell-score inline-block px-2 py-1 text-xs rounded <?php echo esc_attr(rap_bg_score_class($ta['t0'])); ?>"><?php echo number_format($ta['t0'], 2); ?></span>
+                  <?php if ($report_type === 'sel'): ?><?php echo rap_pct_pill($ta['t0_pct'] ?? null); ?><?php endif; ?>
+                </div>
+              <?php else: ?><span class="rap-cell-score text-slate-400">—</span><?php endif; ?>
             </td>
             <?php if ($has_ti): ?>
             <td class="px-3 py-3 text-center">
               <?php if ($ta['ti'] !== null): ?>
-                <span class="inline-block px-2 py-1 text-xs rounded <?php echo esc_attr(rap_bg_score_class($ta['ti'])); ?>"><?php echo number_format($ta['ti'], 2); ?></span>
-              <?php else: ?><span class="text-slate-400">—</span><?php endif; ?>
+                <div class="inline-flex items-center gap-1.5">
+                  <span class="rap-cell-score inline-block px-2 py-1 text-xs rounded <?php echo esc_attr(rap_bg_score_class($ta['ti'])); ?>"><?php echo number_format($ta['ti'], 2); ?></span>
+                  <?php if ($report_type === 'sel'): ?><?php echo rap_pct_pill($ta['ti_pct'] ?? null); ?><?php endif; ?>
+                </div>
+              <?php else: ?><span class="rap-cell-score text-slate-400">—</span><?php endif; ?>
             </td>
             <?php endif; ?>
             <td class="px-3 py-3 text-center">
               <?php if ($ta['t1'] !== null): ?>
-                <span class="inline-block px-2 py-1 text-xs rounded <?php echo esc_attr(rap_bg_score_class($ta['t1'])); ?>"><?php echo number_format($ta['t1'], 2); ?></span>
-              <?php else: ?><span class="text-slate-400">—</span><?php endif; ?>
+                <div class="inline-flex items-center gap-1.5">
+                  <span class="rap-cell-score inline-block px-2 py-1 text-xs rounded <?php echo esc_attr(rap_bg_score_class($ta['t1'])); ?>"><?php echo number_format($ta['t1'], 2); ?></span>
+                  <?php if ($report_type === 'sel'): ?><?php echo rap_pct_pill($ta['t1_pct'] ?? null); ?><?php endif; ?>
+                </div>
+              <?php else: ?><span class="rap-cell-score text-slate-400">—</span><?php endif; ?>
             </td>
+            <?php if ($report_type !== 'sel'): ?>
             <td class="px-3 py-3 text-center">
               <?php if ($ta['delta'] !== null): ?>
                 <span class="inline-block px-2 py-1 text-xs rounded <?php echo esc_attr(rap_delta_badge_class($ta['delta'])); ?>">
@@ -733,6 +900,7 @@ foreach ($all_tutors as $tu) {
                 </span>
               <?php else: ?><span class="text-slate-400">—</span><?php endif; ?>
             </td>
+            <?php endif; ?>
           </tr>
         <?php endforeach; ?>
       </tbody>
@@ -773,14 +941,49 @@ function buildBarChart(canvasId, labels, datasets, yMax) {
 const hasTi = <?php echo $has_ti ? 'true' : 'false'; ?>;
 const yMax = <?php echo (int)$yMax; ?>;
 
-// Prof chart datasets
-const profDs = [
-  { label: '<?php echo $lbl; ?> T0', data: <?php echo wp_json_encode($chart_t0); ?>, backgroundColor: '#34aada', borderRadius: 3 },
-];
-if (hasTi) profDs.push({ label: '<?php echo $lbl; ?> Ti', data: <?php echo wp_json_encode($chart_ti); ?>, backgroundColor: '#fd431c', borderRadius: 3 });
-profDs.push({ label: '<?php echo $lbl; ?> T1', data: <?php echo wp_json_encode($chart_t1); ?>, backgroundColor: '#057a55', borderRadius: 3 });
+// Prof chart data (full set); we re-build datasets dynamically based on selectedProfs.
+const profChartRows = <?php echo wp_json_encode($prof_chart_data, JSON_UNESCAPED_UNICODE); ?>;
+const chartProfList = <?php echo wp_json_encode($chart_prof_list, JSON_UNESCAPED_UNICODE); ?>;
+let selectedProfs = Object.keys(chartProfList); // default: all selected
 
-buildBarChart('sel-chart', <?php echo wp_json_encode($chart_labels, JSON_UNESCAPED_UNICODE); ?>, profDs, yMax);
+let profChartInstance = null;
+function renderProfChart(){
+  const rows = profChartRows.filter(r => selectedProfs.includes(String(r.pid)));
+  const labels = rows.map(r => r.name);
+  const ds = [
+    { label: '<?php echo $lbl; ?> T0', data: rows.map(r => r.t0), backgroundColor: '#34aada', borderRadius: 3 },
+  ];
+  if (hasTi) ds.push({ label: '<?php echo $lbl; ?> Ti', data: rows.map(r => r.ti), backgroundColor: '#fd431c', borderRadius: 3 });
+  ds.push({ label: '<?php echo $lbl; ?> T1', data: rows.map(r => r.t1), backgroundColor: '#057a55', borderRadius: 3 });
+
+  if (profChartInstance) profChartInstance.destroy();
+  const ctx = document.getElementById('sel-chart');
+  if (!ctx) return;
+  profChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: ds },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top' },
+        tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + (c.parsed.y !== null ? c.parsed.y.toFixed(2) : '—') } }
+      },
+      scales: {
+        x: { ticks: { maxRotation: 45, minRotation: 30, font: { size: 11 } } },
+        y: { beginAtZero: true, max: yMax, ticks: { stepSize: yMax <= 5 ? 0.5 : 10 } }
+      }
+    }
+  });
+}
+
+// Lazy: don't render per-prof chart until user clicks "Arată grafic" (canvas starts hidden)
+let profChartBuilt = false;
+function buildProfChartIfNeeded(){
+  if (profChartBuilt) return;
+  renderProfChart();
+  profChartBuilt = true;
+}
 
 // Tutor-filtered charts — per professor, 3 stages
 const allProfs = <?php echo wp_json_encode($prof_chart_data, JSON_UNESCAPED_UNICODE); ?>;
@@ -837,28 +1040,48 @@ function renderTutorCharts() {
   });
 }
 
-// Initial render
-renderTutorCharts();
+// Lazy: tutor charts are only built once the wrapper becomes visible.
+let tutorChartsBuilt = false;
+function buildTutorChartsIfNeeded(){
+  if (tutorChartsBuilt) return;
+  renderTutorCharts();
+  tutorChartsBuilt = true;
+}
 
-// Inline tutor filter for charts (client-side only)
+// Helper: filter rows of a tbody by dataset attr against a Set of allowed values.
+// If selected is the full list (or empty), show all rows.
+function filterTableRows(tableId, attr, selectedIds, allIds){
+  const table = document.getElementById(tableId);
+  if (!table) return;
+  const rows = table.querySelectorAll('tbody tr');
+  const showAll = !selectedIds.length || selectedIds.length === allIds.length;
+  const allow = new Set(selectedIds.map(String));
+  rows.forEach(tr => {
+    const v = String(tr.dataset[attr] || '');
+    tr.classList.toggle('hidden', !(showAll || allow.has(v)));
+  });
+}
+
+// Inline tutor filter — drives tutor chart + tutor table
 (function(){
   const wrap = document.getElementById('chart-tutor-wrap');
   const trigger = document.getElementById('chart-tutor-trigger');
   const dropdown = document.getElementById('chart-tutor-dropdown');
+  const search = document.getElementById('chart-tutor-search');
   if (!wrap || !trigger || !dropdown) return;
 
   const checkSvg = '<svg class="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>';
   const arrow = '<svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>';
 
   function render() {
-    // Update checkboxes
+    // Update checkbox icons
     dropdown.querySelectorAll('.ct-opt').forEach(opt => {
       const v = opt.dataset.val, on = selectedTutors.includes(v);
       const box = opt.querySelector('.ct-check');
       box.className = 'inline-flex items-center justify-center w-4 h-4 rounded border ct-check ' + (on ? 'bg-sky-600 border-sky-600' : 'bg-white border-slate-300');
       box.innerHTML = on ? checkSvg : '';
     });
-    // Update trigger text
+    // Trigger label
     const allKeys = Object.keys(chartTutorList);
     if (selectedTutors.length === allKeys.length || selectedTutors.length === 0) {
       trigger.innerHTML = '<span class="ms-placeholder text-slate-400">Toți tutorii</span>' + arrow;
@@ -870,7 +1093,18 @@ renderTutorCharts();
       }).join('');
       trigger.innerHTML = tags + arrow;
     }
-    renderTutorCharts();
+    // Re-render chart only if the user has opened it at least once.
+    if (tutorChartsBuilt) renderTutorCharts();
+    // Filter the per-tutor table rows.
+    filterTableRows('rap-tutor-table', 'tid', selectedTutors, allKeys);
+  }
+
+  function applySearch(q){
+    const qn = (q || '').toString().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
+    dropdown.querySelectorAll('.ct-opt').forEach(opt => {
+      const hay = opt.dataset.name || '';
+      opt.style.display = (!qn || hay.includes(qn)) ? '' : 'none';
+    });
   }
 
   trigger.addEventListener('click', (e) => {
@@ -883,7 +1117,9 @@ renderTutorCharts();
       }
       return;
     }
+    const wasHidden = dropdown.classList.contains('hidden');
     dropdown.classList.toggle('hidden');
+    if (wasHidden && search) { search.value = ''; applySearch(''); search.focus(); }
   });
   dropdown.addEventListener('click', (e) => {
     const opt = e.target.closest('.ct-opt');
@@ -897,9 +1133,90 @@ renderTutorCharts();
     }
     render();
   });
+  search?.addEventListener('input', () => applySearch(search.value));
+  search?.addEventListener('click', e => e.stopPropagation());
   document.addEventListener('click', (e) => {
     if (!e.target.closest('#chart-tutor-wrap')) dropdown.classList.add('hidden');
   });
+
+  // Initial table sync (no-op when all tutors selected, but safe)
+  render();
+})();
+
+// Inline prof filter — drives per-prof chart + per-prof table
+(function(){
+  const wrap = document.getElementById('chart-prof-wrap');
+  const trigger = document.getElementById('chart-prof-trigger');
+  const dropdown = document.getElementById('chart-prof-dropdown');
+  const search = document.getElementById('chart-prof-search');
+  if (!wrap || !trigger || !dropdown) return;
+
+  const checkSvg = '<svg class="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>';
+  const arrow = '<svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>';
+
+  function render(){
+    dropdown.querySelectorAll('.cp-opt').forEach(opt => {
+      const v = opt.dataset.val, on = selectedProfs.includes(v);
+      const box = opt.querySelector('.cp-check');
+      box.className = 'inline-flex items-center justify-center w-4 h-4 rounded border cp-check ' + (on ? 'bg-sky-600 border-sky-600' : 'bg-white border-slate-300');
+      box.innerHTML = on ? checkSvg : '';
+    });
+    const allKeys = Object.keys(chartProfList);
+    if (selectedProfs.length === allKeys.length || selectedProfs.length === 0) {
+      trigger.innerHTML = '<span class="ms-placeholder text-slate-400">Toți profesorii</span>' + arrow;
+    } else {
+      const tags = selectedProfs.map(v => {
+        const lab = chartProfList[v] || v;
+        return `<span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-200 cp-tag" data-val="${v}">
+          ${lab}<button type="button" class="cp-remove hover:text-red-600">&times;</button></span>`;
+      }).join('');
+      trigger.innerHTML = tags + arrow;
+    }
+    if (profChartBuilt) renderProfChart();
+    filterTableRows('rap-table', 'pid', selectedProfs, allKeys);
+  }
+
+  function applySearch(q){
+    const qn = (q || '').toString().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
+    dropdown.querySelectorAll('.cp-opt').forEach(opt => {
+      const hay = opt.dataset.name || '';
+      opt.style.display = (!qn || hay.includes(qn)) ? '' : 'none';
+    });
+  }
+
+  trigger.addEventListener('click', (e) => {
+    if (e.target.closest('.cp-remove')) {
+      const tag = e.target.closest('.cp-tag');
+      if (tag?.dataset.val) {
+        selectedProfs = selectedProfs.filter(v => v !== tag.dataset.val);
+        if (selectedProfs.length === 0) selectedProfs = Object.keys(chartProfList);
+        render();
+      }
+      return;
+    }
+    const wasHidden = dropdown.classList.contains('hidden');
+    dropdown.classList.toggle('hidden');
+    if (wasHidden && search) { search.value = ''; applySearch(''); search.focus(); }
+  });
+  dropdown.addEventListener('click', (e) => {
+    const opt = e.target.closest('.cp-opt');
+    if (!opt) return;
+    const val = opt.dataset.val;
+    if (selectedProfs.includes(val)) {
+      selectedProfs = selectedProfs.filter(v => v !== val);
+      if (selectedProfs.length === 0) selectedProfs = Object.keys(chartProfList);
+    } else {
+      selectedProfs.push(val);
+    }
+    render();
+  });
+  search?.addEventListener('input', () => applySearch(search.value));
+  search?.addEventListener('click', e => e.stopPropagation());
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#chart-prof-wrap')) dropdown.classList.add('hidden');
+  });
+
+  render();
 })();
 
 // Table sorting
@@ -930,8 +1247,330 @@ renderTutorCharts();
     });
   });
 })();
+
+// Chart toggles (per-profesor + per-tutor) + CSV export for the two tables
+(function(){
+  function toggleChart(btn){
+    const target = document.getElementById(btn.dataset.target);
+    if (!target) return;
+    const nowHidden = target.classList.toggle('hidden');
+    const lbl = btn.querySelector('.rap-toggle-label');
+    if (lbl) lbl.textContent = nowHidden ? 'Arată grafic' : 'Ascunde grafic';
+    btn.setAttribute('aria-expanded', nowHidden ? 'false' : 'true');
+    if (!nowHidden) {
+      if (btn.id === 'rap-toggle-prof-chart')  buildProfChartIfNeeded();
+      if (btn.id === 'rap-toggle-tutor-chart') buildTutorChartsIfNeeded();
+    }
+  }
+  document.getElementById('rap-toggle-prof-chart')?.addEventListener('click', e => toggleChart(e.currentTarget));
+  document.getElementById('rap-toggle-tutor-chart')?.addEventListener('click', e => toggleChart(e.currentTarget));
+
+  // CSV export — serializes a table's thead/tbody into CSV (what the user sees).
+  function cellText(td){
+    return (td.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+  function csvEscape(v){
+    const s = String(v == null ? '' : v);
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function tableToCsv(table){
+    if (!table) return '';
+    const lines = [];
+    const heads = Array.from(table.querySelectorAll('thead tr')).pop();
+    if (!heads) return '';
+
+    // Determine per-column whether it should be split into <score> and <score %> CSV columns.
+    const headerCells = Array.from(heads.querySelectorAll('th'));
+    const splitFlags  = headerCells.map(th => th.hasAttribute('data-csv-split'));
+
+    // Header row
+    const headerOut = [];
+    headerCells.forEach((th, i) => {
+      const lab = cellText(th);
+      if (splitFlags[i]) {
+        headerOut.push(csvEscape(lab));
+        headerOut.push(csvEscape(lab + ' %'));
+      } else {
+        headerOut.push(csvEscape(lab));
+      }
+    });
+    lines.push(headerOut.join(','));
+
+    // Body rows
+    table.querySelectorAll('tbody tr').forEach(tr => {
+      if (tr.classList.contains('hidden')) return; // respect current filter
+      const tds = Array.from(tr.querySelectorAll('td'));
+      if (!tds.length) return;
+      const row = [];
+      tds.forEach((td, i) => {
+        if (splitFlags[i]) {
+          const scoreEl = td.querySelector('.rap-cell-score');
+          const pctEl   = td.querySelector('.rap-cell-pct');
+          row.push(csvEscape(scoreEl ? cellText(scoreEl) : cellText(td)));
+          row.push(csvEscape(pctEl   ? cellText(pctEl)   : ''));
+        } else {
+          row.push(csvEscape(cellText(td)));
+        }
+      });
+      lines.push(row.join(','));
+    });
+    return lines.join('\r\n');
+  }
+  function downloadCsv(filename, csv){
+    const blob = new Blob(["﻿" + csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename + '_' + new Date().toISOString().slice(0,19).replace(/[:T]/g,'-') + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+  }
+  function wireExport(btnId){
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const table = document.getElementById(btn.dataset.table);
+      if (!table) return;
+      downloadCsv(btn.dataset.filename || 'export', tableToCsv(table));
+    });
+  }
+  wireExport('rap-export-prof');
+  wireExport('rap-export-tutor');
+})();
 </script>
 <?php endif; ?>
+
+<!-- MODAL: Exportă rezultate elevi (SEL) -->
+<div id="rap-elevi-modal" class="fixed inset-0 z-[100] hidden">
+  <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+  <div class="relative max-w-xl mx-auto my-10">
+    <div class="mx-4 overflow-visible bg-white border shadow-xl rounded-2xl border-slate-200">
+      <div class="flex items-center justify-between px-5 py-4 border-b bg-slate-50 border-slate-200">
+        <h3 class="text-base font-semibold text-slate-900">Exportă rezultate elevi (SEL)</h3>
+        <button type="button" id="rap-elevi-close" class="p-2 text-slate-500 hover:text-slate-700">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6l12 12M6 18 18 6"/></svg>
+        </button>
+      </div>
+
+      <form id="rap-elevi-form" method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="px-5 py-4">
+        <input type="hidden" name="action" value="es_export_sel_elevi">
+        <input type="hidden" name="_wpnonce" value="<?php echo esc_attr(wp_create_nonce('es_export_sel_elevi')); ?>">
+        <div id="rap-elevi-prof-inputs"></div>
+
+        <div id="rap-elevi-error" class="hidden mb-3 px-3 py-2 text-sm text-rose-800 bg-rose-50 border border-rose-200 rounded-xl" role="alert"></div>
+
+        <div class="grid grid-cols-1 gap-4">
+          <!-- An școlar (required) -->
+          <div>
+            <label class="block mb-1 text-xs font-medium text-slate-600">An școlar <span class="text-rose-600">*</span></label>
+            <select name="an_scolar" id="rap-elevi-year" required class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300">
+              <?php
+                $modal_years = $years_available;
+                if (!in_array($default_year, $modal_years, true)) $modal_years[] = $default_year;
+                sort($modal_years, SORT_NATURAL);
+                $modal_years = array_reverse($modal_years);
+                foreach ($modal_years as $yr):
+              ?>
+                <option value="<?php echo esc_attr($yr); ?>" <?php selected($year_filter === $yr); ?>><?php echo esc_html($yr); ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+
+          <!-- Profesori (multiselect) -->
+          <div class="relative" id="rap-elevi-prof-wrap">
+            <label class="block mb-1 text-xs font-medium text-slate-600">Profesori <span class="text-slate-400">(implicit toți)</span></label>
+            <div id="rap-elevi-prof-trigger" class="flex items-center gap-1 min-h-[38px] w-full px-3 py-1.5 text-sm bg-white border rounded-xl border-slate-300 cursor-pointer hover:border-slate-400 flex-wrap">
+              <span class="ms-placeholder text-slate-400">Toți profesorii</span>
+              <svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+            </div>
+            <div id="rap-elevi-prof-dropdown" class="hidden absolute z-[110] left-0 right-0 mt-1 bg-white border shadow-lg rounded-xl border-slate-200 py-1 max-h-72 overflow-y-auto">
+              <div class="px-2 pb-2 pt-1 sticky top-0 bg-white border-b border-slate-100">
+                <input type="text" id="rap-elevi-prof-search" placeholder="Caută profesor..." class="w-full px-2 py-1 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-sky-500">
+              </div>
+              <div id="rap-elevi-prof-list" class="text-sm text-slate-500 px-3 py-2">Se încarcă profesorii...</div>
+            </div>
+          </div>
+
+          <!-- Evaluare (stages) -->
+          <div>
+            <label class="block mb-1 text-xs font-medium text-slate-600">Evaluare</label>
+            <div class="flex flex-wrap gap-3">
+              <label class="inline-flex items-center gap-2 text-sm">
+                <input type="checkbox" name="stages[]" value="sel-t0" checked class="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500">
+                SEL T0
+              </label>
+              <label class="inline-flex items-center gap-2 text-sm">
+                <input type="checkbox" name="stages[]" value="sel-ti" checked class="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500">
+                SEL Ti
+              </label>
+              <label class="inline-flex items-center gap-2 text-sm">
+                <input type="checkbox" name="stages[]" value="sel-t1" checked class="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500">
+                SEL T1
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-5 mt-5 border-t border-slate-200">
+          <button type="button" id="rap-elevi-cancel" class="px-3 py-2 text-sm bg-white border rounded-xl hover:bg-slate-50 border-slate-300">Anulează</button>
+          <button type="submit" id="rap-elevi-submit" class="inline-flex items-center gap-2 px-3 py-2 text-sm text-white bg-sky-600 rounded-xl hover:bg-sky-700">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+            Descarcă CSV
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const modal    = document.getElementById('rap-elevi-modal');
+  const openBtn  = document.getElementById('rap-open-export-elevi');
+  const closeBtn = document.getElementById('rap-elevi-close');
+  const cancel   = document.getElementById('rap-elevi-cancel');
+  const form     = document.getElementById('rap-elevi-form');
+  const yearSel  = document.getElementById('rap-elevi-year');
+  const errEl    = document.getElementById('rap-elevi-error');
+  const submit   = document.getElementById('rap-elevi-submit');
+  if (!modal || !openBtn) return;
+
+  const profWrap     = document.getElementById('rap-elevi-prof-wrap');
+  const profTrigger  = document.getElementById('rap-elevi-prof-trigger');
+  const profDropdown = document.getElementById('rap-elevi-prof-dropdown');
+  const profList     = document.getElementById('rap-elevi-prof-list');
+  const profSearch   = document.getElementById('rap-elevi-prof-search');
+  const profInputs   = document.getElementById('rap-elevi-prof-inputs');
+
+  const AJAX_URL = <?php echo wp_json_encode(admin_url('admin-ajax.php')); ?>;
+  const NONCE    = <?php echo wp_json_encode(wp_create_nonce('edu_nonce')); ?>;
+
+  const ARROW = '<svg class="w-4 h-4 ml-auto shrink-0 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>';
+  const CHECK = '<svg class="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>';
+
+  let profOptions = {};       // pid => name
+  let selectedProfs = [];     // array of pid strings
+
+  function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
+  function norm(s){ return (s||'').toString().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu,'').trim(); }
+  function showErr(msg){ if (!errEl) return; errEl.textContent = msg || ''; errEl.classList.toggle('hidden', !msg); }
+  function clearErr(){ showErr(''); }
+
+  function syncHiddenInputs(){
+    profInputs.innerHTML = selectedProfs.map(v => `<input type="hidden" name="prof_ids[]" value="${escapeHtml(v)}">`).join('');
+  }
+  function renderTrigger(){
+    const allKeys = Object.keys(profOptions);
+    if (!allKeys.length) {
+      profTrigger.innerHTML = '<span class="ms-placeholder text-slate-400">Niciun profesor pentru acest an</span>' + ARROW;
+      return;
+    }
+    if (!selectedProfs.length || selectedProfs.length === allKeys.length) {
+      profTrigger.innerHTML = '<span class="ms-placeholder text-slate-400">Toți profesorii</span>' + ARROW;
+      return;
+    }
+    const tags = selectedProfs.map(v => {
+      const lab = profOptions[v] || ('#' + v);
+      return `<span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-200 re-tag" data-val="${v}">
+        ${escapeHtml(lab)}<button type="button" class="re-remove hover:text-red-600">&times;</button></span>`;
+    }).join('');
+    profTrigger.innerHTML = tags + ARROW;
+  }
+  function renderOptions(filter){
+    const qn = norm(filter);
+    const entries = Object.entries(profOptions)
+      .filter(([pid, name]) => !qn || norm(name).includes(qn))
+      .sort((a,b) => a[1].localeCompare(b[1], 'ro'));
+    if (!entries.length) {
+      profList.innerHTML = '<div class="px-3 py-2 text-sm text-slate-500">Nu există profesori pentru anul școlar selectat.</div>';
+      return;
+    }
+    profList.innerHTML = entries.map(([pid, name]) => {
+      const on = selectedProfs.includes(pid);
+      const boxCls = 'inline-flex items-center justify-center w-4 h-4 rounded border re-check ' + (on ? 'bg-sky-600 border-sky-600' : 'bg-white border-slate-300');
+      return `<div class="re-opt flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-slate-50" data-val="${pid}">
+        <span class="${boxCls}">${on ? CHECK : ''}</span><span>${escapeHtml(name)}</span></div>`;
+    }).join('');
+  }
+
+  async function loadProfesori(year){
+    profList.innerHTML = '<div class="px-3 py-2 text-sm text-slate-500">Se încarcă profesorii...</div>';
+    profOptions = {};
+    selectedProfs = [];
+    syncHiddenInputs();
+    renderTrigger();
+    try{
+      const fd = new FormData();
+      fd.append('action', 'edu_rap_profesori_by_year');
+      fd.append('nonce', NONCE);
+      fd.append('year', year);
+      const r = await fetch(AJAX_URL, { method:'POST', body: fd, credentials:'same-origin' });
+      const data = await r.json();
+      if (!data || !data.success) throw new Error(data && data.data && data.data.message ? data.data.message : 'Eroare la încărcare.');
+      (data.data || []).forEach(p => { profOptions[String(p.pid)] = p.name; });
+      renderTrigger();
+      renderOptions(profSearch.value);
+    } catch(e){
+      profList.innerHTML = '<div class="px-3 py-2 text-sm text-rose-600">Eroare la încărcarea profesorilor.</div>';
+    }
+  }
+
+  function openModal(){
+    clearErr();
+    modal.classList.remove('hidden');
+    loadProfesori(yearSel.value);
+  }
+  function closeModal(){
+    modal.classList.add('hidden');
+    profDropdown.classList.add('hidden');
+  }
+
+  openBtn.addEventListener('click', openModal);
+  closeBtn?.addEventListener('click', closeModal);
+  cancel?.addEventListener('click', closeModal);
+  modal.querySelector('.absolute.inset-0')?.addEventListener('click', (e) => { if (e.target === e.currentTarget) closeModal(); });
+
+  yearSel.addEventListener('change', () => loadProfesori(yearSel.value));
+
+  profTrigger.addEventListener('click', (e) => {
+    if (e.target.closest('.re-remove')) {
+      const tag = e.target.closest('.re-tag');
+      if (tag?.dataset.val) {
+        selectedProfs = selectedProfs.filter(v => v !== tag.dataset.val);
+        syncHiddenInputs(); renderTrigger(); renderOptions(profSearch.value);
+      }
+      return;
+    }
+    const wasHidden = profDropdown.classList.contains('hidden');
+    profDropdown.classList.toggle('hidden');
+    if (wasHidden) { profSearch.value = ''; renderOptions(''); profSearch.focus(); }
+  });
+  profDropdown.addEventListener('click', (e) => {
+    const opt = e.target.closest('.re-opt');
+    if (!opt) return;
+    const val = opt.dataset.val;
+    if (selectedProfs.includes(val)) selectedProfs = selectedProfs.filter(v => v !== val);
+    else selectedProfs.push(val);
+    syncHiddenInputs(); renderTrigger(); renderOptions(profSearch.value);
+  });
+  profSearch.addEventListener('input', () => renderOptions(profSearch.value));
+  profSearch.addEventListener('click', e => e.stopPropagation());
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#rap-elevi-prof-wrap')) profDropdown.classList.add('hidden');
+  });
+
+  form.addEventListener('submit', (e) => {
+    clearErr();
+    if (!yearSel.value) { e.preventDefault(); showErr('Selectează anul școlar.'); return; }
+    const stagesChecked = form.querySelectorAll('input[name="stages[]"]:checked').length;
+    if (!stagesChecked) { e.preventDefault(); showErr('Selectează cel puțin o evaluare (SEL T0 / Ti / T1).'); return; }
+    // Submit normal → admin-post returnează CSV, modalul rămâne deschis (iframe-less download via Content-Disposition).
+    // Îl închidem după o mică întârziere ca să nu ascundem eventuale erori de browser.
+    setTimeout(() => closeModal(), 400);
+  });
+})();
+</script>
 
 <!-- Filter dropdowns JS (always loaded, independent of results) -->
 <script>
