@@ -422,7 +422,21 @@ usort($rows, function($a,$b){
               $lit_comp_t1 = delta_badge($r->lit_comp_d_t1);
               $lit_acc_t1  = delta_badge($r->lit_acc_d_t1);
 
-              $completion = (float)($r->completion_max ?? 0);
+              // Grad completare = media între etapele așteptate (T0/Ti/T1 pt SEL, T0/T1 pt LIT).
+              // Etapele lipsă contează ca 0%, ca să nu mai apară 100% când o singură etapă e completă.
+              if ($modul_type === 'sel') {
+                $stages_expected = ['t0','ti','t1'];
+                $stage_rows = $r->sel_latest ?? [];
+              } else {
+                $stages_expected = ['t0','t1'];
+                $stage_rows = $r->lit_latest ?? [];
+              }
+              $sum_comp = 0.0;
+              foreach ($stages_expected as $st) {
+                $row_st = $stage_rows[$st] ?? null;
+                $sum_comp += $row_st ? (float)($row_st->completion ?? 0) : 0.0;
+              }
+              $completion = $sum_comp / max(1, count($stages_expected));
               $report_url = home_url('/panou/raport/elev/' . (int)$r->student_id);
               $rowTintCls = ($modul_type==='lit' && $r->lit_remedial) ? '' : '';
             ?>

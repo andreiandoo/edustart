@@ -184,38 +184,38 @@ $qs = $_GET; unset($qs['paged']); $base_url = esc_url(add_query_arg($qs, remove_
 </section>
 
 <!-- Filtre -->
-<section class="flex items-end justify-between px-6 my-6 gap-x-4 mobile:px-2">
-  <form method="get" class="grid items-end w-full grid-cols-12 gap-3 md:grid-cols-12">
-    <div class="md:col-span-3 mobile:cols-span-12">
-        <label class="block mb-1 text-xs font-medium text-slate-600">Căutare (nume/email)</label>
-        <input type="text" name="s" value="<?php echo esc_attr($s); ?>"
-                class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-600 focus:border-transparent">
+<section class="px-6 my-6 mobile:px-2">
+  <form method="get" class="grid items-end grid-cols-1 gap-3 md:grid-cols-12">
+    <div class="md:col-span-5">
+      <label class="block mb-1 text-xs font-medium text-slate-600">Căutare (nume/email)</label>
+      <input type="text" name="s" value="<?php echo esc_attr($s); ?>"
+             class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-600 focus:border-transparent">
     </div>
-    <div class="md:col-span-9 mobile:grid mobile:grid-cols-12 mobile:items-end mobile:gap-x-2 ">
-      <div class="mobile:col-span-5">
-          <label class="block mb-1 text-xs font-medium text-slate-600">Rol</label>
-          <select name="role" class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-600 focus:border-transparent">
-          <option value="">— Oricare —</option>
-          <?php foreach ($filter_role_list as $rr): $lab = $ROLE_LABELS[$rr] ?? ucfirst($rr); ?>
-              <option value="<?php echo esc_attr($rr); ?>" <?php selected($role_f===$rr); ?>><?php echo esc_html($lab); ?></option>
-          <?php endforeach; ?>
-          </select>
-      </div>
-      <div class="mobile:col-span-5">
-          <label class="block mb-1 text-xs font-medium text-slate-600">Pe pagină</label>
-          <input type="number" min="5" max="200" name="perpage" value="<?php echo (int)$perpage; ?>"
-                  class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-600 focus:border-transparent">
-      </div>
-      <div class="mobile:col-span-2">
-          <button type="submit"
-                  class="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-white shadow-sm rounded-xl bg-emerald-600 hover:bg-emerald-700">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4">
-              <path fill-rule="evenodd" d="M3.792 2.938A49.069 49.069 0 0 1 12 2.25c2.797 0 5.54.236 8.209.688a1.857 1.857 0 0 1 1.541 1.836v1.044a3 3 0 0 1-.879 2.121l-6.182 6.182a1.5 1.5 0 0 0-.439 1.061v2.927a3 3 0 0 1-1.658 2.684l-1.757.878A.75.75 0 0 1 9.75 21v-5.818a1.5 1.5 0 0 0-.44-1.06L3.13 7.938a3 3 0 0 1-.879-2.121V4.774c0-.897.64-1.683 1.542-1.836Z" clip-rule="evenodd" />
-          </svg>
 
-          <span class="mobile:hidden">Filtrează</span>
-          </button>
-      </div>
+    <div class="md:col-span-3">
+      <label class="block mb-1 text-xs font-medium text-slate-600">Rol</label>
+      <select name="role" class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:ring-1 focus:ring-sky-600 focus:border-transparent">
+        <option value="">— Oricare —</option>
+        <?php foreach ($filter_role_list as $rr): $lab = $ROLE_LABELS[$rr] ?? ucfirst($rr); ?>
+          <option value="<?php echo esc_attr($rr); ?>" <?php selected($role_f===$rr); ?>><?php echo esc_html($lab); ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+
+    <div class="md:col-span-2">
+      <label class="block mb-1 text-xs font-medium text-slate-600">Pe pagină</label>
+      <input type="number" min="5" max="200" name="perpage" value="<?php echo (int)$perpage; ?>"
+             class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-600 focus:border-transparent">
+    </div>
+
+    <div class="md:col-span-2">
+      <button type="submit"
+              class="inline-flex items-center justify-center w-full gap-2 px-3 py-2 text-sm font-medium text-white shadow-sm rounded-xl bg-emerald-600 hover:bg-emerald-700">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4">
+          <path fill-rule="evenodd" d="M3.792 2.938A49.069 49.069 0 0 1 12 2.25c2.797 0 5.54.236 8.209.688a1.857 1.857 0 0 1 1.541 1.836v1.044a3 3 0 0 1-.879 2.121l-6.182 6.182a1.5 1.5 0 0 0-.439 1.061v2.927a3 3 0 0 1-1.658 2.684l-1.757.878A.75.75 0 0 1 9.75 21v-5.818a1.5 1.5 0 0 0-.44-1.06L3.13 7.938a3 3 0 0 1-.879-2.121V4.774c0-.897.64-1.683 1.542-1.836Z" clip-rule="evenodd" />
+        </svg>
+        <span>Filtrează</span>
+      </button>
     </div>
   </form>
 </section>

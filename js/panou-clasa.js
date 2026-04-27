@@ -169,7 +169,10 @@ jQuery(function ($) {
               </select>
             </div>
             <div>
-              <label class="${lbl}">Observație</label>
+              <label class="${lbl} inline-flex items-center gap-1">
+                Observație
+                <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold cursor-help" title="Modificări status elev" aria-label="Modificări status elev">i</span>
+              </label>
               <select name="students[${idx}][observation]" class="${sel} obs-select">
                 <option value=""></option>
                 <option value="abandon">Abandon</option>
@@ -179,8 +182,11 @@ jQuery(function ($) {
               </select>
             </div>
             <div>
-              <label class="${lbl}">Alte observații</label>
-              <textarea name="students[${idx}][alte_obs]" rows="2" placeholder="Ex. cazuri CES" class="${inp}"></textarea>
+              <label class="${lbl} inline-flex items-center gap-1">
+                Alte observații
+                <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold cursor-help" title="Ex. cazuri CES, situații speciale" aria-label="Ex. cazuri CES, situații speciale">i</span>
+              </label>
+              <textarea name="students[${idx}][alte_obs]" rows="2" placeholder="Ex. cazuri CES, situații speciale" class="${inp}"></textarea>
             </div>
             <!-- Other conditional fields -->
             <div class="cauze-abs-cell" style="display:none;">

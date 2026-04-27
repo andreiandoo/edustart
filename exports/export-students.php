@@ -33,6 +33,9 @@ if (isset($_GET['prof'])) {
   }
 }
 
+// Filtru generație (folosit de pagina Profesor → Lista elevi)
+$gen_filter = isset($_GET['gen']) ? (int) $_GET['gen'] : 0;
+
 /* === Query elevi (fără paginare: exportă toate potrivirile) === */
 $where  = 'WHERE 1=1';
 $params = [];
@@ -50,6 +53,10 @@ if (!empty($prof_arr)) {
   $in_ph = implode(',', array_fill(0, count($prof_arr), '%d'));
   $where .= " AND professor_id IN ($in_ph)";
   foreach ($prof_arr as $pid) $params[] = $pid;
+}
+if ($gen_filter > 0) {
+  $where .= " AND generation_id = %d";
+  $params[] = $gen_filter;
 }
 
 $sql_all = "

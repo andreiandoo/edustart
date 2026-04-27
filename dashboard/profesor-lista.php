@@ -485,13 +485,23 @@ get_header('blank'); ?>
           Editează
         </button>
 
-        <button type="button"
-                class="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold text-white rounded-md hover:bg-slate-700">
+      <?php endif; ?>
+
+      <?php if ($gen):
+        $export_url = add_query_arg([
+          'action'   => 'es_export_gen_students',
+          '_wpnonce' => wp_create_nonce('es_export_gen_students'),
+          'gen'      => (int) $gen->id,
+        ], admin_url('admin-post.php'));
+      ?>
+        <a href="<?php echo esc_url($export_url); ?>"
+           class="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold text-white rounded-md hover:bg-slate-700"
+           title="Exportă toți elevii din generația selectată">
           <svg stroke="currentColor" fill="none" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" class="size-4">
               <path d="M4 17v2a2 2 0  0 0 2 2h12a2 2 0  0 0 2 -2v-2"></path><path d="M7 9l5 -5l5 5"></path><path d="M12 4l0 12"></path>
           </svg>
           Export CSV
-        </button>
+        </a>
       <?php endif; ?>
 
       <?php if ($viewer_mode === 'ADMIN'): ?>

@@ -31,6 +31,19 @@ if (!function_exists('fmt_delta')) {
     return ($x>0?'+':'').number_format($x,2);
   }
 }
+/* Pill cromatic pentru % completare — același sistem ca pe /panou/generatii/ */
+if (!function_exists('bg_pct_class')) {
+  function bg_pct_class($pct){
+    if ($pct === null || $pct === '') return 'bg-slate-200 text-slate-700';
+    $v = max(0, min(100, floatval($pct)));
+    if     ($v < 40)  return 'bg-red-600 text-white font-bold';
+    elseif ($v < 60)  return 'bg-orange-400 text-white font-bold';
+    elseif ($v < 75)  return 'bg-yellow-300 text-slate-800 font-bold';
+    elseif ($v < 90)  return 'bg-lime-500 text-slate-800 font-bold';
+    elseif ($v < 100) return 'bg-lime-600 text-white font-bold';
+    return 'bg-green-500 text-white font-bold';
+  }
+}
 ?>
 
 <!-- ============================ SEL — REZUMAT ============================ -->
@@ -87,7 +100,7 @@ if (!function_exists('fmt_delta')) {
         <tr>
           <td class="py-2 pr-4 font-medium">T0</td>
           <td class="py-2 pr-4">
-            <span class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200">
+            <span class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded <?= esc_attr(bg_pct_class($sel_completion_t0 ?? null)) ?>">
               <?= isset($sel_completion_t0) ? number_format($sel_completion_t0, 0) : '—' ?>%
             </span>
           </td>
@@ -98,7 +111,7 @@ if (!function_exists('fmt_delta')) {
             </td>
           <?php endforeach; ?>
           <td class="py-2 pr-4">
-            <span class="px-2 py-1 rounded bg-slate-100 text-slate-800">
+            <span class="px-2 py-1 rounded <?= esc_attr(bg_score_class($sel_stage_overall_avg['t0'] ?? null)) ?>">
               <?= $sel_stage_overall_avg['t0']!==null?number_format($sel_stage_overall_avg['t0'],2):'—' ?>
             </span>
           </td>
@@ -108,7 +121,7 @@ if (!function_exists('fmt_delta')) {
         <tr>
           <td class="py-2 pr-4 font-medium">Ti</td>
           <td class="py-2 pr-4">
-            <span class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200">
+            <span class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded <?= esc_attr(bg_pct_class($sel_completion_ti ?? null)) ?>">
               <?= isset($sel_completion_ti) ? number_format($sel_completion_ti, 0) : '—' ?>%
             </span>
           </td>
@@ -126,7 +139,7 @@ if (!function_exists('fmt_delta')) {
             <?php $dg = ($sel_stage_overall_avg['ti']??null)!==null && ($sel_stage_overall_avg['t0']??null)!==null
                 ? ($sel_stage_overall_avg['ti'] - $sel_stage_overall_avg['t0']) : null; ?>
             <div class="flex items-center gap-1">
-              <span class="px-2 py-1 rounded bg-slate-100 text-slate-800">
+              <span class="px-2 py-1 rounded <?= esc_attr(bg_score_class($sel_stage_overall_avg['ti'] ?? null)) ?>">
                 <?= $sel_stage_overall_avg['ti']!==null?number_format($sel_stage_overall_avg['ti'],2):'—' ?>
               </span>
               <span class="px-1.5 py-0.5 rounded text-[11px] <?= esc_attr(delta_badge_class($dg)) ?>">Δ T0 <?= fmt_delta($dg) ?></span>
@@ -138,7 +151,7 @@ if (!function_exists('fmt_delta')) {
         <tr>
           <td class="py-2 pr-4 font-medium">T1</td>
           <td class="py-2 pr-4">
-            <span class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200">
+            <span class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded <?= esc_attr(bg_pct_class($sel_completion_t1 ?? null)) ?>">
               <?= isset($sel_completion_t1) ? number_format($sel_completion_t1, 0) : '—' ?>%
             </span>
           </td>
@@ -162,7 +175,7 @@ if (!function_exists('fmt_delta')) {
                    ? ($sel_stage_overall_avg['t1'] - $sel_stage_overall_avg['t0']) : null;
             ?>
             <div class="flex flex-wrap items-center gap-1">
-              <span class="px-2 py-1 rounded bg-slate-100 text-slate-800">
+              <span class="px-2 py-1 rounded <?= esc_attr(bg_score_class($sel_stage_overall_avg['t1'] ?? null)) ?>">
                 <?= $sel_stage_overall_avg['t1']!==null?number_format($sel_stage_overall_avg['t1'],2):'—' ?>
               </span>
               <span class="px-1.5 py-0.5 rounded text-[11px] <?= esc_attr(delta_badge_class($dg1)) ?>">Δ Ti <?= fmt_delta($dg1) ?></span>
@@ -175,18 +188,18 @@ if (!function_exists('fmt_delta')) {
         <tr class="border-t">
             <td class="py-2 pr-4 font-semibold">Medie (toate etapele)</td>
             <td class="py-2 pr-4">
-              <span class="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-300">
+              <span class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded <?= esc_attr(bg_pct_class($sel_completion_allStages ?? null)) ?>">
                 <?= isset($sel_completion_allStages) ? number_format($sel_completion_allStages, 0) : '—' ?>%
               </span>
             </td>
             <?php foreach ($SEL_CHAPTERS as $cap):
             $v = $sel_gen_chapter_avg_allStages[$cap] ?? null; ?>
             <td class="py-2 pr-4">
-                <span class="px-2 py-1 text-lg font-bold rounded bg-slate-100 text-slate-800"><?= $v!==null?number_format($v,2):'—' ?></span>
+                <span class="px-2 py-1 text-lg rounded <?= esc_attr(bg_score_class($v)) ?>"><?= $v!==null?number_format($v,2):'—' ?></span>
             </td>
             <?php endforeach; ?>
             <td class="py-2 pr-4">
-            <span class="px-2 py-1 text-lg font-bold rounded bg-slate-100 text-slate-800">
+            <span class="px-2 py-1 text-lg rounded <?= esc_attr(bg_score_class($sel_overall_allStages_avg ?? null)) ?>">
                 <?= $sel_overall_allStages_avg!==null?number_format($sel_overall_allStages_avg,2):'—' ?>
             </span>
             </td>
@@ -326,7 +339,7 @@ if (!function_exists('fmt_delta')) {
                     <td class="py-2 pr-4"><?= $s_t0_avg !== null ? '<span class="px-2 py-1 rounded font-semibold '.esc_attr(bg_score_class($s_t0_avg)).'">'.number_format($s_t0_avg,2).'</span>' : '—' ?></td>
                     <td class="py-2 pr-4"><?= $s_ti_avg !== null ? '<span class="px-2 py-1 rounded font-semibold '.esc_attr(bg_score_class($s_ti_avg)).'">'.number_format($s_ti_avg,2).'</span>' : '—' ?></td>
                     <td class="py-2 pr-4"><?= $s_t1_avg !== null ? '<span class="px-2 py-1 rounded font-semibold '.esc_attr(bg_score_class($s_t1_avg)).'">'.number_format($s_t1_avg,2).'</span>' : '—' ?></td>
-                    <td class="py-2 pr-4"><span class="px-2 py-1 font-bold rounded bg-slate-200 text-slate-800"><?= $s_overall !== null ? number_format($s_overall,2) : '—' ?></span></td>
+                    <td class="py-2 pr-4"><span class="px-2 py-1 rounded <?= esc_attr(bg_score_class($s_overall)) ?>"><?= $s_overall !== null ? number_format($s_overall,2) : '—' ?></span></td>
                     <?php
                       $sd_ti_t0 = ($s_ti_avg !== null && $s_t0_avg !== null) ? ($s_ti_avg - $s_t0_avg) : null;
                       $sd_t1_ti = ($s_t1_avg !== null && $s_ti_avg !== null) ? ($s_t1_avg - $s_ti_avg) : null;

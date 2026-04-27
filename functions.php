@@ -387,8 +387,10 @@ add_filter('logout_redirect', function($redirect_to, $requested_redirect_to, $us
  */
 add_action('admin_init', function() {
     if (is_user_logged_in() && !current_user_can('administrator')) {
-        // Permitem acces doar la AJAX (pentru ca editorul/tema să funcționeze corect)
-        if (!(defined('DOING_AJAX') && DOING_AJAX)) {
+        // Permitem AJAX și admin-post.php (necesare pentru exporturi/handlere de tema).
+        $is_ajax       = (defined('DOING_AJAX') && DOING_AJAX);
+        $is_admin_post = isset($GLOBALS['pagenow']) && $GLOBALS['pagenow'] === 'admin-post.php';
+        if (!$is_ajax && !$is_admin_post) {
             wp_redirect(home_url('/panou'));
             exit;
         }
@@ -1000,7 +1002,10 @@ function edu_get_student_edit_form() {
       </label>
 
       <label class="grid gap-1 text-sm">
-        <span class="font-medium text-slate-700">Observație</span>
+        <span class="inline-flex items-center gap-1 font-medium text-slate-700">
+          Observație
+          <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold cursor-help" title="Modificări status elev" aria-label="Modificări status elev">i</span>
+        </span>
         <select name="observation" class="edus-inp edus-observation">
           <option value=""></option>
           <option value="abandon" <?php selected($obs==='abandon'); ?>>Abandon</option>
@@ -1011,17 +1016,20 @@ function edu_get_student_edit_form() {
       </label>
 
       <label class="grid gap-1 text-sm">
-        <span class="font-medium text-slate-700">Alte observații</span>
+        <span class="inline-flex items-center gap-1 font-medium text-slate-700">
+          Alte observații
+          <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold cursor-help" title="Ex. cazuri CES, situații speciale" aria-label="Ex. cazuri CES, situații speciale">i</span>
+        </span>
         <textarea name="alte_obs" rows="2" class="edus-inp"><?php echo esc_textarea((string)($student->alte_obs ?? '')); ?></textarea>
       </label>
 
-      <!-- Conditional fields: hidden by default -->
-      <label class="grid gap-1 text-sm cauze-abs-cell" style="<?php echo $show_cauze ? '' : 'display:none;'; ?>">
+      <!-- Always visible: profesorul completează liber, indiferent de absenteism -->
+      <label class="grid gap-1 text-sm cauze-abs-cell">
         <span class="font-medium text-slate-700">Cauze absenteism</span>
         <textarea name="cauze_abs" rows="2" class="edus-inp"><?php echo esc_textarea((string)($student->cauze_abs ?? '')); ?></textarea>
       </label>
 
-      <label class="grid gap-1 text-sm risc-abandon-cell<?php echo $show_abs_extra ? ' bg-rose-50 rounded-lg p-1' : ''; ?>" style="<?php echo $show_abs_extra ? '' : 'display:none;'; ?>">
+      <label class="grid gap-1 text-sm risc-abandon-cell<?php echo $show_abs_extra ? ' bg-rose-50 rounded-lg p-1' : ''; ?>">
         <span class="font-medium text-slate-700">Risc abandon</span>
         <select name="risc_abandon" class="edus-inp risc-abandon-select<?php echo $show_abs_extra ? ' !border-rose-400 !text-rose-700' : ''; ?>">
           <option value=""></option>
@@ -1030,7 +1038,7 @@ function edu_get_student_edit_form() {
         </select>
       </label>
 
-      <label class="grid gap-1 text-sm edus-notes-wrap" style="<?php echo $obs !== '' ? '' : 'display:none;'; ?>">
+      <label class="grid gap-1 text-sm edus-notes-wrap">
         <span class="font-medium text-slate-700">Mențiuni</span>
         <textarea name="notes" rows="2" class="edus-inp"><?php echo esc_textarea((string)$student->notes); ?></textarea>
       </label>
@@ -1045,7 +1053,7 @@ function edu_get_student_edit_form() {
       'demers_consilier' => ['label' => 'Am apelat la consilier / mediator școlar','val' => (string)($student->demers_consilier ?? '')],
     ];
     ?>
-    <div class="px-3 pt-3 pb-2 mx-4 mt-0 mb-4 border-t rounded-lg demersuri-section border-amber-200 bg-amber-50/50" style="<?php echo $show_abs_extra ? '' : 'display:none;'; ?>"
+    <div class="px-3 pt-3 pb-2 mx-4 mt-0 mb-4 border-t rounded-lg demersuri-section border-amber-200 bg-amber-50/50"
          data-form-id="edus-edit-form-<?php echo (int)$student->id; ?>">
       <p class="mb-2 text-xs font-semibold text-amber-800">In caz de absenteism cronic, ce demersuri ați intreprins?</p>
       <div class="grid grid-cols-3 gap-2">
@@ -1253,7 +1261,7 @@ function load_questionnaire_form_callback() {
   foreach ($sections_order as $prefix => $section_title) {
     if (empty($grouped_fields[$prefix])) continue;
     // Afișează titlul secțiunii
-    echo '<h3 class="sticky top-0 w-full px-4 py-3 mb-3 text-lg font-semibold tracking-wider text-center text-white uppercase bg-es-orange">' . esc_html($section_title) . '</h3>';
+    echo '<h3 class="sticky top-0 w-full px-4 py-3 mb-3 text-lg font-semibold tracking-wider text-center text-white uppercase bg-sky-800">' . esc_html($section_title) . '</h3>';
     $q = 1;
     foreach ($grouped_fields[$prefix] as $field) {
       $field_name = $field['name'];
@@ -1458,44 +1466,64 @@ function edu_add_students_handler() {
     wp_send_json_error('Nu ai trimis elevi.');
   }
 
-  $inserted = 0;
-  $errors   = [];
+  // Tabela poate avea coloane vechi (fără extended fields) pe medii diferite — inserăm dinamic.
+  $existing_cols = array_flip( (array) $wpdb->get_col("SHOW COLUMNS FROM {$students_table}") );
+
+  $extended_text   = ['cauze_abs', 'alte_obs'];
+  $extended_simple = ['risc_abandon', 'repeta_clasa', 'demers_familie', 'demers_conducere', 'demers_consilier'];
+
+  $inserted    = 0;
+  $errors      = [];
+  $created_ids = [];
 
   foreach ($rows as $row) {
     $first = sanitize_text_field($row['first_name'] ?? '');
     $last  = sanitize_text_field($row['last_name']  ?? '');
     if (!$first || !$last) { continue; }
 
-    $class_label = sanitize_text_field($row['class_label'] ?? '');
-    $age = max(1, min(20, intval($row['age'] ?? 0)));
-    $gender      = sanitize_text_field($row['gender'] ?? '');
-    $obs         = sanitize_text_field($row['observation'] ?? '');
-    $sit_abs     = sanitize_text_field($row['sit_abs'] ?? '');
-    $frec        = sanitize_text_field($row['frecventa'] ?? '');
-    $bursa       = sanitize_text_field($row['bursa'] ?? '');
-    $dif         = sanitize_text_field($row['dif_limba'] ?? '');
-    $notes       = sanitize_textarea_field($row['notes'] ?? '');
+    $payload = [
+      'generation_id' => $generation_id,
+      'professor_id'  => $owner,
+      'class_id'      => $class_id,
+      'class_label'   => sanitize_text_field($row['class_label'] ?? ''),
+      'first_name'    => $first,
+      'last_name'     => $last,
+      'age'           => max(1, min(20, intval($row['age'] ?? 0))),
+      'gender'        => sanitize_text_field($row['gender'] ?? ''),
+      'observation'   => sanitize_text_field($row['observation'] ?? ''),
+      'sit_abs'       => sanitize_text_field($row['sit_abs'] ?? ''),
+      'frecventa'     => sanitize_text_field($row['frecventa'] ?? ''),
+      'bursa'         => sanitize_text_field($row['bursa'] ?? ''),
+      'dif_limba'     => sanitize_text_field($row['dif_limba'] ?? ''),
+      'notes'         => sanitize_textarea_field($row['notes'] ?? ''),
+    ];
+    foreach ($extended_text as $col) {
+      if (isset($existing_cols[$col])) {
+        $payload[$col] = sanitize_textarea_field($row[$col] ?? '');
+      }
+    }
+    foreach ($extended_simple as $col) {
+      if (isset($existing_cols[$col])) {
+        $payload[$col] = sanitize_text_field($row[$col] ?? '');
+      }
+    }
 
-    $sql = $wpdb->prepare(
-      "INSERT INTO {$students_table}
-        (generation_id, professor_id, class_id, class_label, first_name, last_name, age, gender, observation, sit_abs, frecventa, bursa, dif_limba, notes)
-      VALUES
-        (%d, %d, %d, %s, %s, %s, %d, %s, %s, %s, %s, %s, %s, %s)",
-      $generation_id, $owner, $class_id,
-      $class_label, $first, $last, $age, $gender, $obs, $sit_abs, $frec, $bursa, $dif, $notes
-    );
-
-    $ok = $wpdb->query($sql);
-
+    $ok = $wpdb->insert($students_table, $payload);
     if ($ok === false) {
       $errors[] = $wpdb->last_error ?: 'insert_failed';
     } else {
       $inserted++;
+      $created_ids[] = (int)$wpdb->insert_id;
     }
   }
 
+  if (!empty($created_ids)) {
+    /** Sincronizare integrare (cube-api etc.) */
+    do_action('edustart_student_created', $created_ids);
+  }
+
   if ($inserted > 0) {
-    wp_send_json_success([ 'inserted' => $inserted ]);
+    wp_send_json_success([ 'inserted' => $inserted, 'ids' => $created_ids ]);
   }
 
   // dacă nu s-a inserat niciun rând, întoarcem motivul
@@ -3637,6 +3665,48 @@ add_action('admin_post_es_export_students', function () {
     echo 'Link invalid (nonce).';
     exit;
   }
+  require_once trailingslashit( get_stylesheet_directory() ) . 'exports/export-students.php';
+  exit;
+});
+
+/* =======================================================================
+ * Export CSV pentru elevii unei generații (din /panou/lista/)
+ * Acces: profesorul proprietar al generației, tutor alocat sau admin.
+ * ======================================================================= */
+add_action('admin_post_es_export_gen_students', function () {
+  if ( ! is_user_logged_in() ) { status_header(403); echo 'Autentifică-te.'; exit; }
+
+  $nonce = $_GET['_wpnonce'] ?? '';
+  if ( ! wp_verify_nonce($nonce, 'es_export_gen_students') ) {
+    status_header(403); echo 'Link invalid (nonce).'; exit;
+  }
+
+  $gen_id = isset($_GET['gen']) ? (int) $_GET['gen'] : 0;
+  if ($gen_id <= 0) { status_header(400); echo 'Lipsește generation_id.'; exit; }
+
+  global $wpdb;
+  $owner = (int) $wpdb->get_var( $wpdb->prepare(
+    "SELECT professor_id FROM {$wpdb->prefix}edu_generations WHERE id = %d",
+    $gen_id
+  ));
+  if ($owner <= 0) { status_header(404); echo 'Generație inexistentă.'; exit; }
+
+  $u    = wp_get_current_user();
+  $uid  = (int) $u->ID;
+  $is_admin = current_user_can('manage_options');
+  $is_prof  = in_array('profesor', (array)$u->roles, true) && $owner === $uid;
+  $is_tutor = in_array('tutor', (array)$u->roles, true)
+              && (int) get_user_meta($owner, 'assigned_tutor_id', true) === $uid;
+
+  if ( ! $is_admin && ! $is_prof && ! $is_tutor ) {
+    status_header(403); echo 'Nu ai permisiuni pentru această generație.'; exit;
+  }
+
+  // Forțăm filtrul către export-students.php și păstrăm ne-setate s/prof.
+  $_GET['gen']  = $gen_id;
+  $_GET['s']    = '';
+  $_GET['prof'] = [];
+
   require_once trailingslashit( get_stylesheet_directory() ) . 'exports/export-students.php';
   exit;
 });
