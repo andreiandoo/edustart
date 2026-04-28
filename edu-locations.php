@@ -76,14 +76,24 @@ register_activation_hook( __FILE__, 'edu_alter_students_add_extended_fields' );
 
 /**
  * Auto-migrate extended student fields on admin load (idempotent).
- * Uses a one-shot option so the ALTERs aren't re-checked on every request.
+ * Verificăm prezența unei coloane reprezentative — dacă lipsește, rulăm
+ * ALTER-ele (sunt deja idempotente prin SHOW COLUMNS LIKE).
+ * Renunțăm la lacătul pe `option`: lacătul s-a setat odată chiar dacă ALTER-ul
+ * nu s-a aplicat efectiv pe DB (ex: rollback) → ne lăsa cu o schemă incompletă.
  */
-add_action('admin_init', function () {
-    if (get_option('edu_students_extended_v1') === 'done') return;
+add_action('admin_init', 'edu_ensure_students_extended_schema');
+add_action('init',       'edu_ensure_students_extended_schema');
+function edu_ensure_students_extended_schema() {
+    static $checked = false;
+    if ($checked) return;
+    global $wpdb;
+    $table = $wpdb->prefix . 'edu_students';
+    $col   = $wpdb->get_var( $wpdb->prepare("SHOW COLUMNS FROM {$table} LIKE %s", 'risc_abandon') );
+    if ($col) { $checked = true; return; } // schema este OK
     if (function_exists('edu_alter_students_add_class_label'))     edu_alter_students_add_class_label();
     if (function_exists('edu_alter_students_add_extended_fields')) edu_alter_students_add_extended_fields();
-    update_option('edu_students_extended_v1', 'done', false);
-});
+    $checked = true;
+}
 
 /**
  * Admin assets loader — extins să includă și noile pagini
