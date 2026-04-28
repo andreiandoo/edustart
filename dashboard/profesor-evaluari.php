@@ -54,6 +54,36 @@ function edu_progress_bar_colored($p){
 }
 function edu_pick_status($arr){ return in_array('final',$arr,true)?'final':(in_array('draft',$arr,true)?'temp':'—'); }
 
+/**
+ * Calculează gradul de completare dintr-un rând de rezultat (parsare results JSON).
+ * Numără cheile cu valori non-goale / total chei (ignorând meta keys 'modul', 'meta').
+ * Fallback: completion stocat în coloană dacă JSON-ul nu poate fi parsat.
+ */
+if (!function_exists('edu_completion_from_row')) {
+  function edu_completion_from_row($row){
+    if (!$row || !is_object($row)) return null;
+    $raw = $row->results ?? '';
+    if (is_string($raw) && $raw !== '') {
+      $arr = json_decode($raw, true);
+      if (is_array($arr)) {
+        // skip non-question keys
+        foreach (['modul','meta','module','slug','status'] as $skip) unset($arr[$skip]);
+        $total = 0; $filled = 0;
+        foreach ($arr as $v) {
+          // sări peste sub-arrays / obiecte (meta interne)
+          if (is_array($v) || is_object($v)) continue;
+          $total++;
+          $sv = is_string($v) ? trim($v) : $v;
+          if ($sv !== null && $sv !== '' && $sv !== false) $filled++;
+        }
+        if ($total > 0) return ($filled / $total) * 100.0;
+      }
+    }
+    // ultim fallback la valoarea stocată
+    return isset($row->completion) ? (float)$row->completion : null;
+  }
+}
+
 /* ---------- BADGE-uri pentru scoruri (după codul tău) ---------- */
 if (!function_exists('badge_score')) {
   function badge_score($v,$size='sm'){
@@ -304,6 +334,32 @@ foreach ($agg as $key => $row) {
   }
 }
 
+/* ---------- Etape finalizate + grad completare per dimensiune ---------- */
+foreach ($agg as $row) {
+  $stages_done = [];
+
+  if ($row->modul_type === 'sel') {
+    $stages_expected = ['t0' => 'T0', 'ti' => 'Ti', 't1' => 'T1'];
+    $stage_rows      = $row->sel_latest ?? [];
+  } else {
+    $stages_expected = ['t0' => 'T0', 't1' => 'T1'];
+    $stage_rows      = $row->lit_latest ?? [];
+  }
+
+  $sum = 0.0; $cnt_expected = count($stages_expected);
+  foreach ($stages_expected as $key => $label) {
+    $r_st = $stage_rows[$key] ?? null;
+    $pct  = $r_st ? edu_completion_from_row($r_st) : null;
+    $sum += ($pct === null) ? 0.0 : (float)$pct;
+    if ($r_st) $stages_done[] = $label;
+  }
+  $avg_pct = $cnt_expected > 0 ? ($sum / $cnt_expected) : 0.0;
+
+  $row->stages_done = $stages_done;
+  $row->comp_sel    = ($row->modul_type === 'sel') ? $avg_pct : null;
+  $row->comp_lit    = ($row->modul_type === 'lit') ? $avg_pct : null;
+}
+
 /* ---------- Sortare ---------- */
 $rows = array_values($agg);
 usort($rows, function($a,$b){
@@ -381,7 +437,8 @@ usort($rows, function($a,$b){
             <!-- LIT group -->
             <th class="px-4 py-2 font-semibold text-center border-l-2 border-slate-200" x-show="showLITCols()" colspan="4">Evaluare LIT</th>
 
-            <th class="px-4 py-3 font-medium text-center align-bottom border-l-2 border-slate-200" rowspan="2">Grad Completare</th>
+            <th class="px-4 py-3 font-medium text-center align-bottom border-l-2 border-slate-200" rowspan="2" x-show="showSELCols()">Grad Completare SEL</th>
+            <th class="px-4 py-3 font-medium text-center align-bottom border-l-2 border-slate-200" rowspan="2" x-show="showLITCols()">Grad Completare LIT</th>
           </tr>
           <!-- Row 2: capete detaliate -->
           <tr class="text-white bg-sky-800">
@@ -422,21 +479,9 @@ usort($rows, function($a,$b){
               $lit_comp_t1 = delta_badge($r->lit_comp_d_t1);
               $lit_acc_t1  = delta_badge($r->lit_acc_d_t1);
 
-              // Grad completare = media între etapele așteptate (T0/Ti/T1 pt SEL, T0/T1 pt LIT).
-              // Etapele lipsă contează ca 0%, ca să nu mai apară 100% când o singură etapă e completă.
-              if ($modul_type === 'sel') {
-                $stages_expected = ['t0','ti','t1'];
-                $stage_rows = $r->sel_latest ?? [];
-              } else {
-                $stages_expected = ['t0','t1'];
-                $stage_rows = $r->lit_latest ?? [];
-              }
-              $sum_comp = 0.0;
-              foreach ($stages_expected as $st) {
-                $row_st = $stage_rows[$st] ?? null;
-                $sum_comp += $row_st ? (float)($row_st->completion ?? 0) : 0.0;
-              }
-              $completion = $sum_comp / max(1, count($stages_expected));
+              // Etape finalizate (doar cele cu rezultate stocate)
+              $stages_label = !empty($r->stages_done) ? implode(' · ', $r->stages_done) : '—';
+
               $report_url = home_url('/panou/raport/elev/' . (int)$r->student_id);
               $rowTintCls = ($modul_type==='lit' && $r->lit_remedial) ? '' : '';
             ?>
@@ -455,7 +500,7 @@ usort($rows, function($a,$b){
               </td>
               <td class="px-4 py-3 text-slate-700"><?php echo $class_label; ?></td>
               <td class="px-4 py-3"><span class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-lg bg-slate-100 text-slate-700"><?php echo esc_html($modul_label); ?></span></td>
-              <td class="px-4 py-3 text-slate-500">T0 / <?php echo ($modul_type==='lit')?'—':'Ti'; ?> / T1</td>
+              <td class="px-4 py-3 text-slate-700"><?php echo esc_html($stages_label); ?></td>
               <td class="px-4 py-3"><span class="inline-flex items-center px-2 py-1 rounded-xl text-xs font-semibold <?php echo esc_attr($badge_cls); ?>"><?php echo esc_html($status); ?></span></td>
 
               <!-- SEL group -->
@@ -469,7 +514,12 @@ usort($rows, function($a,$b){
               <td class="px-4 py-3 text-center" x-show="showLITCols()"><?php echo $lit_comp_t1; ?></td>
               <td class="px-4 py-3 text-center" x-show="showLITCols()"><?php echo $lit_acc_t1; ?></td>
 
-              <td class="px-4 py-3 border-l-2 border-slate-200"><?php echo edu_progress_bar_colored($completion); ?></td>
+              <td class="px-4 py-3 border-l-2 border-slate-200" x-show="showSELCols()">
+                <?php echo $r->comp_sel !== null ? edu_progress_bar_colored($r->comp_sel) : '<span class="text-slate-400">—</span>'; ?>
+              </td>
+              <td class="px-4 py-3 border-l-2 border-slate-200" x-show="showLITCols()">
+                <?php echo $r->comp_lit !== null ? edu_progress_bar_colored($r->comp_lit) : '<span class="text-slate-400">—</span>'; ?>
+              </td>
             </tr>
           <?php endforeach; endif; ?>
         </tbody>

@@ -115,13 +115,22 @@ $total = (int)(
                   : $wpdb->get_var($sql_total)
 );
 
-/* Pagină */
+/* Pagină — selectăm dinamic doar coloanele existente, ca să nu pice query-ul
+   pe medii unde migrarea pentru câmpurile extinse nu s-a rulat încă. */
+$existing_cols = array_flip( (array) $wpdb->get_col("SHOW COLUMNS FROM {$tbl_students}") );
+$wanted_cols   = [
+  'id','generation_id','class_label','professor_id','class_id',
+  'first_name','last_name','age','gender',
+  'observation','notes','sit_abs','frecventa','bursa','dif_limba',
+  'repeta_clasa','alte_obs','cauze_abs','risc_abandon',
+  'demers_familie','demers_conducere','demers_consilier',
+];
+$select_cols = array_values(array_filter($wanted_cols, fn($c) => isset($existing_cols[$c])));
+if (empty($select_cols)) $select_cols = ['*']; // ultim fallback
+$select_sql = implode(',', $select_cols);
+
 $sql_page = "
-  SELECT id, generation_id, class_label, professor_id, class_id,
-         first_name, last_name, age, gender,
-         observation, notes, sit_abs, frecventa, bursa, dif_limba,
-         repeta_clasa, alte_obs, cauze_abs, risc_abandon,
-         demers_familie, demers_conducere, demers_consilier
+  SELECT {$select_sql}
   FROM {$tbl_students}
   {$where}
   ORDER BY id DESC
@@ -599,19 +608,19 @@ $s_safe = is_scalar($s) ? $s : '';
             <td class="px-3 py-3 text-center align-top" data-col="num_t0"><?php echo $num_t0; ?></td>
             <td class="px-3 py-3 text-center align-top" data-col="num_t1"><?php echo $num_t1; ?></td>
 
-            <td class="px-3 py-3 align-top text-slate-800" data-col="observation"><?php echo $r->observation ? esc_html($r->observation) : '—'; ?></td>
-            <td class="px-3 py-3 align-top text-slate-800" data-col="repeta_clasa"><?php echo $r->repeta_clasa ? esc_html($r->repeta_clasa) : '—'; ?></td>
-            <td class="px-3 py-3 align-top text-slate-800" data-col="alte_obs"><?php echo $r->alte_obs ? esc_html($r->alte_obs) : '—'; ?></td>
-            <td class="px-3 py-3 align-top text-slate-800" data-col="notes"><?php echo $r->notes ? esc_html($r->notes) : '—'; ?></td>
-            <td class="px-3 py-3 align-top text-slate-800" data-col="sit_abs"><?php echo $r->sit_abs ? esc_html($r->sit_abs) : '—'; ?></td>
-            <td class="px-3 py-3 align-top text-slate-800" data-col="cauze_abs"><?php echo $r->cauze_abs ? esc_html($r->cauze_abs) : '—'; ?></td>
-            <td class="px-3 py-3 align-top text-slate-800" data-col="risc_abandon"><?php echo $r->risc_abandon ? esc_html($r->risc_abandon) : '—'; ?></td>
-            <td class="px-3 py-3 align-top text-slate-800" data-col="frecventa"><?php echo $r->frecventa ? esc_html($r->frecventa) : '—'; ?></td>
-            <td class="px-3 py-3 align-top text-slate-800" data-col="bursa"><?php echo $r->bursa ? esc_html($r->bursa) : '—'; ?></td>
-            <td class="px-3 py-3 align-top text-slate-800" data-col="dif_limba"><?php echo $r->dif_limba ? esc_html($r->dif_limba) : '—'; ?></td>
-            <td class="px-3 py-3 align-top text-slate-800" data-col="demers_familie"><?php echo $r->demers_familie ? esc_html($r->demers_familie) : '—'; ?></td>
-            <td class="px-3 py-3 align-top text-slate-800" data-col="demers_conducere"><?php echo $r->demers_conducere ? esc_html($r->demers_conducere) : '—'; ?></td>
-            <td class="px-3 py-3 align-top text-slate-800" data-col="demers_consilier"><?php echo $r->demers_consilier ? esc_html($r->demers_consilier) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="observation"><?php echo !empty($r->observation) ? esc_html($r->observation) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="repeta_clasa"><?php echo !empty($r->repeta_clasa ?? '') ? esc_html($r->repeta_clasa) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="alte_obs"><?php echo !empty($r->alte_obs ?? '') ? esc_html($r->alte_obs) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="notes"><?php echo !empty($r->notes) ? esc_html($r->notes) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="sit_abs"><?php echo !empty($r->sit_abs) ? esc_html($r->sit_abs) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="cauze_abs"><?php echo !empty($r->cauze_abs ?? '') ? esc_html($r->cauze_abs) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="risc_abandon"><?php echo !empty($r->risc_abandon ?? '') ? esc_html($r->risc_abandon) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="frecventa"><?php echo !empty($r->frecventa) ? esc_html($r->frecventa) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="bursa"><?php echo !empty($r->bursa) ? esc_html($r->bursa) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="dif_limba"><?php echo !empty($r->dif_limba) ? esc_html($r->dif_limba) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="demers_familie"><?php echo !empty($r->demers_familie ?? '') ? esc_html($r->demers_familie) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="demers_conducere"><?php echo !empty($r->demers_conducere ?? '') ? esc_html($r->demers_conducere) : '—'; ?></td>
+            <td class="px-3 py-3 align-top text-slate-800" data-col="demers_consilier"><?php echo !empty($r->demers_consilier ?? '') ? esc_html($r->demers_consilier) : '—'; ?></td>
 
             <td class="px-3 py-3 align-top text-slate-800" data-col="school"><?php echo esc_html($school_label); ?></td>
             <td class="px-3 py-3 align-top text-slate-800" data-col="city"><?php echo esc_html($city_label); ?></td>

@@ -59,13 +59,22 @@ if ($gen_filter > 0) {
   $params[] = $gen_filter;
 }
 
+// Selectăm doar coloanele care există în tabel (medii diferite pot avea schema parțială).
+$existing_cols = array_flip( (array) $wpdb->get_col("SHOW COLUMNS FROM {$tbl_students}") );
+$wanted_cols   = [
+  'id','generation_id','class_label','professor_id','class_id',
+  'first_name','last_name','age','gender',
+  'observation','notes','sit_abs','frecventa','bursa','dif_limba',
+  'repeta_clasa','alte_obs','cauze_abs','risc_abandon',
+  'demers_familie','demers_conducere','demers_consilier',
+  'created_at','updated_at',
+];
+$select_cols = array_values(array_filter($wanted_cols, fn($c) => isset($existing_cols[$c])));
+if (empty($select_cols)) $select_cols = ['*'];
+$select_sql = implode(',', $select_cols);
+
 $sql_all = "
-  SELECT id, generation_id, class_label, professor_id, class_id,
-         first_name, last_name, age, gender,
-         observation, notes, sit_abs, frecventa, bursa, dif_limba,
-         repeta_clasa, alte_obs, cauze_abs, risc_abandon,
-         demers_familie, demers_conducere, demers_consilier,
-         created_at, updated_at
+  SELECT {$select_sql}
   FROM {$tbl_students}
   {$where}
   ORDER BY id DESC
