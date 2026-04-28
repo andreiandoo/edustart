@@ -28,7 +28,9 @@ if ($can_manage && !empty($_POST['school_action']) && $_POST['school_action'] ==
     $village_id = (int)($_POST['village_id'] ?? 0);
 
     $cod        = ($_POST['cod'] !== '') ? (int)$_POST['cod'] : null;
-    $name       = sanitize_text_field($_POST['name'] ?? '');
+    // câmpul postat este `school_name` — `name` este rezervat de WordPress (post slug)
+    // și provoca 404 la submit. Acceptăm și valoarea veche `name` pentru orice cache de formular.
+    $name       = sanitize_text_field($_POST['school_name'] ?? ($_POST['name'] ?? ''));
     $short_name = sanitize_text_field($_POST['short_name'] ?? '');
     $regiune    = in_array(($_POST['regiune_tfr'] ?? 'RMD'), ['RMD','RCV','SUD'], true) ? $_POST['regiune_tfr'] : 'RMD';
     $statut_vals = ['Cu personalitate juridică', 'Arondată', ''];
@@ -502,7 +504,7 @@ $export_base = add_query_arg([
         <div class="flex flex-col gap-3">
           <div>
             <label class="block mb-1 text-xs font-medium text-slate-700">Denumire *</label>
-            <input type="text" name="name" x-model="form.name"
+            <input type="text" name="school_name" x-model="form.name"
                    class="w-full px-3 py-2 text-sm bg-white border rounded-xl border-slate-300 focus:ring-2 focus:ring-slate-800" required>
           </div>
           <div>
