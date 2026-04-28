@@ -19,13 +19,15 @@ get_header('blank'); ?>
     <div class="w-full max-w-md space-y-6">
       <!-- Logo + Titlu -->
       <div class="text-center">
-        <img src="<?php echo get_template_directory_uri(); ?>/assets/logo-teleskop.svg" alt="EduStart" class="h-10 mx-auto mb-4">
-        <h1 class="text-2xl font-bold text-gray-800">Bun venit!</h1>
+        <div class="applogo">
+          <a href="<?php echo get_site_url();?>" class="flex items-center mb-1 text-3xl leading-5 text-white gap-x-1 group"><span class="font-bold">edu</span><span class="mb-1 text-2xl italic transition-all duration-150 ease-in-out text-sky-300 group-hover:scale-110">start</span></a>
+        </div>
+        <h1 class="text-2xl font-bold text-gray-800">Bun venit! </h1>
         <p class="mt-2 text-sm text-gray-600">Folosește datele contului tău pentru a te loga pe platforma EduStart.</p>
       </div>
 
       <?php if (!empty($_GET['password']) && $_GET['password'] === 'changed'): ?>
-        <div class="p-3 text-sm text-center text-emerald-800 bg-emerald-50 rounded-lg border border-emerald-200">
+        <div class="p-3 text-sm text-center border rounded-lg text-emerald-800 bg-emerald-50 border-emerald-200">
           Parola a fost setata cu succes. Te poti autentifica acum.
         </div>
       <?php endif; ?>

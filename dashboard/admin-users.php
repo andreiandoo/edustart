@@ -88,7 +88,9 @@ $materii_default = [
 
 /* ================= Filtre ================= */
 
-$s       = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
+// `s` este rezervat de WordPress pentru căutarea globală — folosim `q` ca să nu provoace 404 pe /panou/utilizatori/.
+$s       = isset($_GET['q']) ? sanitize_text_field(wp_unslash($_GET['q']))
+         : (isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '');
 $role_f  = isset($_GET['role']) ? sanitize_text_field(wp_unslash($_GET['role'])) : '';
 $perpage = max(5, min(200, (int)($_GET['perpage'] ?? 25)));
 $paged   = max(1, (int)($_GET['paged'] ?? 1));
@@ -188,7 +190,7 @@ $qs = $_GET; unset($qs['paged']); $base_url = esc_url(add_query_arg($qs, remove_
   <form method="get" class="grid items-end grid-cols-1 gap-3 md:grid-cols-12">
     <div class="md:col-span-5">
       <label class="block mb-1 text-xs font-medium text-slate-600">Căutare (nume/email)</label>
-      <input type="text" name="s" value="<?php echo esc_attr($s); ?>"
+      <input type="text" name="q" value="<?php echo esc_attr($s); ?>"
              class="w-full px-3 py-2 text-sm bg-white border shadow-sm rounded-xl border-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-600 focus:border-transparent">
     </div>
 
