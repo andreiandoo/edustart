@@ -107,6 +107,7 @@ add_action('wp_ajax_edu_save_user_form', function () {
         update_user_meta($user_id, 'calificare',     sanitize_text_field($_POST['calificare'] ?? ''));
         update_user_meta($user_id, 'experienta',     sanitize_text_field($_POST['experienta'] ?? ''));
         update_user_meta($user_id, 'segment_rsoi',   sanitize_text_field($_POST['segment_rsoi'] ?? ''));
+        update_user_meta($user_id, 'cohorte',        sanitize_text_field($_POST['cohorte'] ?? ''));
         update_user_meta($user_id, 'nivel_predare',  sanitize_text_field($_POST['nivel_predare'] ?? ''));
         update_user_meta($user_id, 'materia_predata',sanitize_text_field($_POST['materia_predata'] ?? ''));
         update_user_meta($user_id, 'materia_alta',   sanitize_text_field($_POST['materia_alta'] ?? ''));
