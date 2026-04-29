@@ -3707,6 +3707,19 @@ add_action('admin_post_es_export_gen_students', function () {
   $_GET['s']    = '';
   $_GET['prof'] = [];
 
+  // Diagnostic — câte rânduri are gen_id-ul cerut, ca să putem identifica situații
+  // gen "owned" dar fără elevi propriu-ziși în wp_edu_students.
+  if (defined('WP_DEBUG') && WP_DEBUG) {
+    $cnt_gen = (int) $wpdb->get_var( $wpdb->prepare(
+      "SELECT COUNT(*) FROM {$wpdb->prefix}edu_students WHERE generation_id = %d", $gen_id
+    ));
+    $cnt_pair = (int) $wpdb->get_var( $wpdb->prepare(
+      "SELECT COUNT(*) FROM {$wpdb->prefix}edu_students WHERE generation_id = %d AND professor_id = %d",
+      $gen_id, $owner
+    ));
+    error_log("[es_export_gen_students] uid={$uid} gen_id={$gen_id} owner_prof={$owner} role(prof={$is_prof},admin={$is_admin},tutor={$is_tutor}) total_in_gen={$cnt_gen} pair_with_owner={$cnt_pair}");
+  }
+
   require_once trailingslashit( get_stylesheet_directory() ) . 'exports/export-students.php';
   exit;
 });
