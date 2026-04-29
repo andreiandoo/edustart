@@ -219,6 +219,21 @@ function edu_alter_students_add_extended_fields() {
 
     // Extind observation de la ENUM la VARCHAR pentru a suporta valori noi
     $wpdb->query("ALTER TABLE {$table} MODIFY COLUMN observation VARCHAR(50) NULL DEFAULT ''");
+
+    // Lărgim sit_abs: ENUM-ul vechi avea 4 valori scurte ("Deloc"...), formularul folosește
+    // texte lungi ("Absentează des", "Nu a venit niciodată" etc.). Pe MySQL non-strict
+    // valorile invalide erau salvate ca string gol, deci câmpul nu mai apărea la editare.
+    $sit_col = $wpdb->get_row("SHOW COLUMNS FROM {$table} LIKE 'sit_abs'");
+    if ($sit_col && stripos($sit_col->Type, 'enum') !== false) {
+        $wpdb->query("ALTER TABLE {$table} MODIFY COLUMN sit_abs VARCHAR(50) NULL DEFAULT NULL");
+    }
+
+    // Lărgim frecventa: formularul include valori noi ("Da (4ani)", "Date indisponibile")
+    // care nu sunt în ENUM-ul original.
+    $frec_col = $wpdb->get_row("SHOW COLUMNS FROM {$table} LIKE 'frecventa'");
+    if ($frec_col && stripos($frec_col->Type, 'enum') !== false) {
+        $wpdb->query("ALTER TABLE {$table} MODIFY COLUMN frecventa VARCHAR(50) NULL DEFAULT NULL");
+    }
 }
 
 if (!function_exists('edu_schools_add_columns_tfr_siiir_mediu')) {
