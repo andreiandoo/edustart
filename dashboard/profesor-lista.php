@@ -440,7 +440,7 @@ get_header('blank'); ?>
       </div>
 
       <!-- Selector generație (ID — Nume (Nivel) · An) -->
-      <form method="get" class="flex items-center gap-2">
+      <form method="get" action="<?php echo esc_url(home_url('/panou/lista/')); ?>" class="flex items-center gap-2">
         <label for="genSelect" class="inline-flex items-center text-xs font-semibold uppercase text-slate-400">Generație/clasa</label>
         <select id="genSelect" name="gen"
                 class="px-2 py-1 text-sm font-medium rounded-md bg-white/90 text-slate-800 focus:outline-none"
