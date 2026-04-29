@@ -72,6 +72,7 @@ jQuery(function ($) {
     const inp = "w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500";
     const sel = inp + " pr-8";
     const lbl = "text-xs font-medium text-slate-500";
+    const tip = (txt) => `<span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold cursor-help" title="${txt}" aria-label="${txt}">i</span>`;
 
     const showFrec = ["Prescolar", "Primar", "Primar Mic", "Primar Mare"].includes(level);
     const showBursa = ["Primar", "Primar Mic", "Primar Mare", "Gimnazial"].includes(level);
@@ -103,7 +104,7 @@ jQuery(function ($) {
               <input type="text" placeholder="Ex. Popescu" name="students[${idx}][last_name]" required class="${inp}">
             </div>
             <div>
-              <label class="${lbl}">Vârstă *</label>
+              <label class="${lbl} inline-flex items-center gap-1">Vârstă * ${tip('Vârsta elevului în ani împliniți')}</label>
               <input type="number" placeholder="10" name="students[${idx}][age]" required min="1" max="20" class="${inp}">
             </div>
             <div>
@@ -122,7 +123,7 @@ jQuery(function ($) {
               </select>
             </div>
             <div>
-              <label class="${lbl}">Sit. absenteism</label>
+              <label class="${lbl} inline-flex items-center gap-1">Sit. absenteism ${tip('Frecvența situațiilor de absenteism la data completării / editării informației')}</label>
               <select name="students[${idx}][sit_abs]" class="${sel} sit-abs-select">
                 <option value=""></option>
                 <option value="Nu absentează deloc">Nu absentează deloc</option>
@@ -133,7 +134,7 @@ jQuery(function ($) {
               </select>
             </div>
             <div class="frecventa_col" ${showFrec ? '' : 'style="display:none;"'}>
-              <label class="${lbl}">Frecvență grădiniță</label>
+              <label class="${lbl} inline-flex items-center gap-1">Frecvență grădiniță ${tip('Câți ani a frecventat elevul grădinița')}</label>
               <select name="students[${idx}][frecventa]" class="${sel}">
                 <option value=""></option>
                 <option value="Nu">Nu</option>
@@ -145,7 +146,7 @@ jQuery(function ($) {
               </select>
             </div>
             <div class="bursa_col" ${showBursa ? '' : 'style="display:none;"'}>
-              <label class="${lbl}">Bursă socială</label>
+              <label class="${lbl} inline-flex items-center gap-1">Bursă socială ${tip('Este elevul beneficiar de bursă socială (sau alt tip de ajutor social)?')}</label>
               <select name="students[${idx}][bursa]" class="${sel}">
                 <option value=""></option>
                 <option value="Nu">Nu</option>
@@ -153,7 +154,7 @@ jQuery(function ($) {
               </select>
             </div>
             <div>
-              <label class="${lbl}">Limba diferită</label>
+              <label class="${lbl} inline-flex items-center gap-1">Limba diferită ${tip('Limba vorbită acasă diferă de limba de predare?')}</label>
               <select name="students[${idx}][dif_limba]" class="${sel}">
                 <option value=""></option>
                 <option value="Nu">Nu</option>
@@ -161,7 +162,7 @@ jQuery(function ($) {
               </select>
             </div>
             <div>
-              <label class="${lbl}">Repetă clasa</label>
+              <label class="${lbl} inline-flex items-center gap-1">Repetă clasa ${tip('Elevul repetă clasa sau a repetat in trecut?')}</label>
               <select name="students[${idx}][repeta_clasa]" class="${sel}">
                 <option value=""></option>
                 <option value="Da">Da</option>
@@ -169,10 +170,7 @@ jQuery(function ($) {
               </select>
             </div>
             <div>
-              <label class="${lbl} inline-flex items-center gap-1">
-                Observație
-                <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold cursor-help" title="Modificări status elev" aria-label="Modificări status elev">i</span>
-              </label>
+              <label class="${lbl} inline-flex items-center gap-1">Observație ${tip('Modificări ale statusului elevului')}</label>
               <select name="students[${idx}][observation]" class="${sel} obs-select">
                 <option value=""></option>
                 <option value="abandon">Abandon</option>
@@ -182,19 +180,16 @@ jQuery(function ($) {
               </select>
             </div>
             <div>
-              <label class="${lbl} inline-flex items-center gap-1">
-                Alte observații
-                <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold cursor-help" title="Ex. cazuri CES, situații speciale" aria-label="Ex. cazuri CES, situații speciale">i</span>
-              </label>
+              <label class="${lbl} inline-flex items-center gap-1">Alte observații ${tip('Ex. cazuri CES, situații speciale')}</label>
               <textarea name="students[${idx}][alte_obs]" rows="2" placeholder="Ex. cazuri CES, situații speciale" class="${inp}"></textarea>
             </div>
             <!-- Other conditional fields -->
             <div class="cauze-abs-cell" style="display:none;">
-              <label class="${lbl}">Cauze absenteism</label>
+              <label class="${lbl} inline-flex items-center gap-1">Cauze absenteism ${tip('Notați cauze absenteism, dacă sunt cunoscute')}</label>
               <textarea name="students[${idx}][cauze_abs]" rows="2" placeholder="" class="${inp}"></textarea>
             </div>
             <div class="risc-abandon-cell" style="display:none;">
-              <label class="${lbl}">Risc abandon</label>
+              <label class="${lbl} inline-flex items-center gap-1">Risc abandon ${tip('Considerați că elevul se află în risc de abandon școlar?')}</label>
               <select name="students[${idx}][risc_abandon]" class="${sel} risc-abandon-select">
                 <option value=""></option>
                 <option value="Da">Da</option>
@@ -202,7 +197,7 @@ jQuery(function ($) {
               </select>
             </div>
             <div class="notes-cell" style="display:none;">
-              <label class="${lbl}">Mențiuni</label>
+              <label class="${lbl} inline-flex items-center gap-1">Mențiuni ${tip('Alte observații, mențiuni relevante (dacă este cazul)')}</label>
               <textarea name="students[${idx}][notes]" rows="2" placeholder="Detalii (opțional)" class="${inp}"></textarea>
             </div>
           </div>
