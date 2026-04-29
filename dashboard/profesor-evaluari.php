@@ -224,6 +224,7 @@ foreach ($rowsRaw as $r) {
       'class_label'    => $r->class_label,
       'generation_id'  => $r->generation_id,
       'generation_name'=> $r->generation_name,
+      'generation_year'=> $r->generation_year,
       'modul_type'     => ($mt==='literatie'?'lit':$mt),
 
       // latest rows pe etape
@@ -384,7 +385,11 @@ usort($rows, function($a,$b){
           <div class="">
             <select x-model="genFilter" class="px-3 py-2 text-sm bg-white rounded-lg text-slate-800 focus:outline-none">
               <option value="">Toate generațiile/clasele</option>
-              <?php foreach($generations as $g){ echo '<option value="'.esc_attr($g->id).'">'.esc_html($g->name).'</option>'; } ?>
+              <?php foreach($generations as $g){
+                $year_norm = function_exists('es_normalize_year_str') ? es_normalize_year_str($g->year ?? '') : (string)($g->year ?? '');
+                $label = (string)$g->name . ($year_norm !== '' ? ' · ' . $year_norm : '');
+                echo '<option value="'.esc_attr($g->id).'">'.esc_html($label).'</option>';
+              } ?>
             </select>
           </div>
           <div class="">
@@ -427,8 +432,7 @@ usort($rows, function($a,$b){
             <th class="px-4 py-3 font-medium text-left align-bottom" rowspan="2">#</th>
             <th class="px-4 py-3 font-medium text-left align-bottom" rowspan="2">Nume Elev</th>
             <th class="px-4 py-3 font-medium text-left align-bottom" rowspan="2">Clasa</th>
-            <th class="px-4 py-3 font-medium text-left align-bottom" rowspan="2">Modul</th>
-            <th class="px-4 py-3 font-medium text-left align-bottom" rowspan="2">Etape</th>
+            <th class="px-4 py-3 font-medium text-left align-bottom" rowspan="2">Generație</th>
             <th class="px-4 py-3 font-medium text-left align-bottom" rowspan="2">Stare</th>
 
             <!-- SEL group -->
@@ -499,8 +503,22 @@ usort($rows, function($a,$b){
                 </div>
               </td>
               <td class="px-4 py-3 text-slate-700"><?php echo $class_label; ?></td>
-              <td class="px-4 py-3"><span class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-lg bg-slate-100 text-slate-700"><?php echo esc_html($modul_label); ?></span></td>
-              <td class="px-4 py-3 text-slate-700"><?php echo esc_html($stages_label); ?></td>
+              <?php
+                $gen_name  = (string)($r->generation_name ?? '');
+                $gen_year  = function_exists('es_normalize_year_str') ? es_normalize_year_str($r->generation_year ?? '') : (string)($r->generation_year ?? '');
+              ?>
+              <td class="px-4 py-3 text-slate-700">
+                <?php if ($gen_name !== ''): ?>
+                  <div class="flex flex-col leading-tight">
+                    <span class="font-medium text-slate-800"><?php echo esc_html($gen_name); ?></span>
+                    <?php if ($gen_year !== ''): ?>
+                      <span class="text-xs text-slate-500"><?php echo esc_html($gen_year); ?></span>
+                    <?php endif; ?>
+                  </div>
+                <?php else: ?>
+                  <span class="text-slate-400">—</span>
+                <?php endif; ?>
+              </td>
               <td class="px-4 py-3"><span class="inline-flex items-center px-2 py-1 rounded-xl text-xs font-semibold <?php echo esc_attr($badge_cls); ?>"><?php echo esc_html($status); ?></span></td>
 
               <!-- SEL group -->
