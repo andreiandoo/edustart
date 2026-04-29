@@ -115,7 +115,7 @@ $gens = $wpdb->get_results($wpdb->prepare("
 ", $view_professor_id));
 
 // Dacă genul din URL nu e în setul owner-ului, setează implicit prima
-if ($gen && $gen->professor_id !== $view_professor_id && !empty($gens)) {
+if ($gen && (int)$gen->professor_id !== (int)$view_professor_id && !empty($gens)) {
   $gen = $gens[0];
 }
 // — HARD RELOAD: asigură că $gen are toate coloanele de activare
@@ -449,7 +449,7 @@ get_header('blank'); ?>
             <option value="<?php echo (int)$g->id; ?>" <?php selected($gen && $gen->id == $g->id); ?>>
                 #<?php echo (int)$g->id; ?>
                 <?php echo $g->name ? ' — '.esc_html($g->name) : ''; ?>
-                (<?php echo esc_html($human_level($g->level)); ?>) · <?php echo esc_html($g->year); ?>
+                (<?php echo esc_html($human_level($g->level)); ?>) · <?php echo esc_html(function_exists('es_normalize_year_str') ? es_normalize_year_str($g->year) : $g->year); ?>
             </option>
             <?php endforeach; ?>
         </select>

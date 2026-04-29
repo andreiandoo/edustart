@@ -301,7 +301,10 @@ $toast_msg = isset($_GET['msg']) ? sanitize_text_field(wp_unslash($_GET['msg']))
               <option value="<?php echo (int)$gen->id; ?>" <?php selected($selected_gen, (int)$gen->id); ?>>
                 <?php
                   $label = $gen->name ?? ('Gen. #' . (int)$gen->id);
-                  if (!empty($gen->year)) $label .= ' · ' . $gen->year;
+                  if (!empty($gen->year)) {
+                    $yr = function_exists('es_normalize_year_str') ? es_normalize_year_str($gen->year) : (string)$gen->year;
+                    $label .= ' · ' . $yr;
+                  }
                   echo esc_html($label);
                 ?>
               </option>
