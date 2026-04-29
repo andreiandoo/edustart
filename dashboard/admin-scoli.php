@@ -55,7 +55,13 @@ if ($can_manage && !empty($_POST['school_action']) && $_POST['school_action'] ==
       $mediu     = ($village_id > 0 || $parent_id > 0) ? 'rural' : 'urban';
     }
 
-    if ($city_id > 0 && $name !== '') {
+    // Validare minimă (coloanele NOT NULL fără default în wp_edu_schools).
+    $missing = [];
+    if ($city_id <= 0) $missing[] = 'oraș';
+    if ($name === '')  $missing[] = 'denumire';
+    if ($cod === null || $cod <= 0) $missing[] = 'cod SIIIR';
+
+    if (empty($missing)) {
       $data = [
         'city_id'                   => $city_id,
         'village_id'                => ($village_id ?: null),
@@ -76,17 +82,23 @@ if ($can_manage && !empty($_POST['school_action']) && $_POST['school_action'] ==
 
       if ($school_id > 0) {
         $ok = (false !== $wpdb->update($tbl_schools, $data, ['id' => $school_id]));
-        $notice = $ok
-          ? '<div class="p-3 mb-4 text-sm border rounded-lg text-emerald-900 bg-emerald-50 border-emerald-200">Școala a fost actualizată.</div>'
-          : '<div class="p-3 mb-4 text-sm text-white rounded-lg bg-rose-600">Actualizarea a eșuat.</div>';
+        if ($ok) {
+          $notice = '<div class="p-3 mb-4 text-sm border rounded-lg text-emerald-900 bg-emerald-50 border-emerald-200">Școala a fost actualizată.</div>';
+        } else {
+          $err = $wpdb->last_error ? ' <span class="block mt-1 text-xs opacity-90">'.esc_html($wpdb->last_error).'</span>' : '';
+          $notice = '<div class="p-3 mb-4 text-sm text-white rounded-lg bg-rose-600">Actualizarea a eșuat.'.$err.'</div>';
+        }
       } else {
         $ok = (false !== $wpdb->insert($tbl_schools, $data));
-        $notice = $ok
-          ? '<div class="p-3 mb-4 text-sm border rounded-lg text-emerald-900 bg-emerald-50 border-emerald-200">Școală adăugată.</div>'
-          : '<div class="p-3 mb-4 text-sm text-white rounded-lg bg-rose-600">Adăugarea a eșuat.</div>';
+        if ($ok) {
+          $notice = '<div class="p-3 mb-4 text-sm border rounded-lg text-emerald-900 bg-emerald-50 border-emerald-200">Școală adăugată.</div>';
+        } else {
+          $err = $wpdb->last_error ? ' <span class="block mt-1 text-xs opacity-90">'.esc_html($wpdb->last_error).'</span>' : '';
+          $notice = '<div class="p-3 mb-4 text-sm text-white rounded-lg bg-rose-600">Adăugarea a eșuat.'.$err.'</div>';
+        }
       }
     } else {
-      $notice = '<div class="p-3 mb-4 text-sm text-white rounded-lg bg-rose-600">Completează cel puțin <strong>județ</strong>, <strong>oraș</strong> și <strong>denumire</strong>.</div>';
+      $notice = '<div class="p-3 mb-4 text-sm text-white rounded-lg bg-rose-600">Completează: <strong>'.esc_html(implode(', ', $missing)).'</strong>.</div>';
     }
   }
 }

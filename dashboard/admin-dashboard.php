@@ -152,7 +152,37 @@ $profesori_activi        = ad_count_profesori_by_status(['activ']);
 $profesori_in_asteptare  = ad_count_profesori_by_status(['in asteptare']);
 $total_tutori            = ad_count_role('tutor');
 $total_elevi             = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$tbl_students}");
-$total_scoli             = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$tbl_schools}");
+// Numărăm doar școlile alocate efectiv profesorilor (assigned_school_ids).
+$cap_key_for_count = ad_cap_key();
+$assigned_meta_rows = $wpdb->get_col($wpdb->prepare(
+  "SELECT um1.meta_value
+   FROM {$tbl_umeta} um1
+   JOIN {$tbl_umeta} um2 ON um1.user_id = um2.user_id
+   WHERE um1.meta_key = %s
+     AND um2.meta_key = %s
+     AND um2.meta_value LIKE %s",
+  'assigned_school_ids',
+  $cap_key_for_count,
+  '%"profesor"%'
+));
+$assigned_school_ids_set = [];
+foreach ((array)$assigned_meta_rows as $val) {
+  $arr = maybe_unserialize($val);
+  if (!is_array($arr)) continue;
+  foreach ($arr as $sid) {
+    $sid = (int)$sid;
+    if ($sid > 0) $assigned_school_ids_set[$sid] = true;
+  }
+}
+$total_scoli = 0;
+if (!empty($assigned_school_ids_set)) {
+  $ids = array_keys($assigned_school_ids_set);
+  $in_ph = implode(',', array_fill(0, count($ids), '%d'));
+  // intersectăm cu școlile existente ca să nu numărăm IDuri orfane.
+  $total_scoli = (int) $wpdb->get_var(
+    $wpdb->prepare("SELECT COUNT(*) FROM {$tbl_schools} WHERE id IN ($in_ph)", ...$ids)
+  );
+}
 $generatii_active        = (int)$wpdb->get_var("SELECT COUNT(DISTINCT s.generation_id) FROM {$tbl_students} s WHERE s.generation_id IS NOT NULL AND s.generation_id <> 0");
 
 // ——— Ultimii activi
@@ -314,7 +344,7 @@ $last_tutori    = ad_last_active_users_by_role('tutor', 8);
       <div class="p-5 transition-all border shadow-sm bg-gradient-to-br from-amber-50 to-white backdrop-blur rounded-2xl border-amber-100 ring-1 ring-amber-100/60 group-hover:shadow-lg">
         <div class="text-[11px] font-semibold tracking-wide uppercase text-amber-700">Școli</div>
         <div class="mt-2 text-3xl font-extrabold tracking-tight text-slate-900"><?php echo ad_fmt_num($total_scoli); ?></div>
-        <div class="mt-2 text-xs text-slate-500">înregistrate</div>
+        <div class="mt-2 text-xs text-slate-500">alocate profesorilor</div>
       </div>
     </a>
 
