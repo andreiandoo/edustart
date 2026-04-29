@@ -86,13 +86,21 @@ add_action('init',       'edu_ensure_students_extended_schema');
 function edu_ensure_students_extended_schema() {
     static $checked = false;
     if ($checked) return;
+    $checked = true;
     global $wpdb;
     $table = $wpdb->prefix . 'edu_students';
-    $col   = $wpdb->get_var( $wpdb->prepare("SHOW COLUMNS FROM {$table} LIKE %s", 'risc_abandon') );
-    if ($col) { $checked = true; return; } // schema este OK
+
+    $has_risc    = (bool) $wpdb->get_var( $wpdb->prepare("SHOW COLUMNS FROM {$table} LIKE %s", 'risc_abandon') );
+    $sit_col     = $wpdb->get_row("SHOW COLUMNS FROM {$table} LIKE 'sit_abs'");
+    $sit_is_enum = $sit_col && stripos($sit_col->Type, 'enum') !== false;
+    $frec_col    = $wpdb->get_row("SHOW COLUMNS FROM {$table} LIKE 'frecventa'");
+    $frec_is_enum= $frec_col && stripos($frec_col->Type, 'enum') !== false;
+
+    // Dacă tot ce avem nevoie e deja la zi, ieșim rapid.
+    if ($has_risc && !$sit_is_enum && !$frec_is_enum) return;
+
     if (function_exists('edu_alter_students_add_class_label'))     edu_alter_students_add_class_label();
     if (function_exists('edu_alter_students_add_extended_fields')) edu_alter_students_add_extended_fields();
-    $checked = true;
 }
 
 /**
