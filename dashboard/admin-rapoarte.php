@@ -651,7 +651,7 @@ foreach ($all_tutors as $tu) {
       </button>
     </div>
   </div>
-  <div id="sel-chart-wrap" class="hidden" style="max-height:400px;">
+  <div id="sel-chart-wrap" class="hidden" style="height:300px;">
     <canvas id="sel-chart"></canvas>
   </div>
 </section>
