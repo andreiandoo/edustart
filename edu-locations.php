@@ -81,42 +81,51 @@ register_activation_hook( __FILE__, 'edu_alter_students_add_extended_fields' );
  * Renunțăm la lacătul pe `option`: lacătul s-a setat odată chiar dacă ALTER-ul
  * nu s-a aplicat efectiv pe DB (ex: rollback) → ne lăsa cu o schemă incompletă.
  */
+// Important: rulăm doar pe admin_init ca să nu blocăm front-end-ul (ALTER TABLE
+// pe o tabelă activă poate dura câteva secunde). Adminul va atinge wp-admin în
+// scurt timp și migrarea se aplică o singură dată; restul utilizatorilor nu
+// primesc niciodată un request blocat de migrare.
 add_action('admin_init', 'edu_ensure_students_extended_schema');
-add_action('init',       'edu_ensure_students_extended_schema');
 function edu_ensure_students_extended_schema() {
     static $checked = false;
     if ($checked) return;
     $checked = true;
-    global $wpdb;
-    $table = $wpdb->prefix . 'edu_students';
+    try {
+        global $wpdb;
+        $table = $wpdb->prefix . 'edu_students';
 
-    $has_risc    = (bool) $wpdb->get_var( $wpdb->prepare("SHOW COLUMNS FROM {$table} LIKE %s", 'risc_abandon') );
-    $sit_col     = $wpdb->get_row("SHOW COLUMNS FROM {$table} LIKE 'sit_abs'");
-    $sit_is_enum = $sit_col && stripos($sit_col->Type, 'enum') !== false;
-    $frec_col    = $wpdb->get_row("SHOW COLUMNS FROM {$table} LIKE 'frecventa'");
-    $frec_is_enum= $frec_col && stripos($frec_col->Type, 'enum') !== false;
+        $has_risc    = (bool) $wpdb->get_var( $wpdb->prepare("SHOW COLUMNS FROM {$table} LIKE %s", 'risc_abandon') );
+        $sit_col     = $wpdb->get_row("SHOW COLUMNS FROM {$table} LIKE 'sit_abs'");
+        $sit_is_enum = $sit_col && stripos($sit_col->Type, 'enum') !== false;
+        $frec_col    = $wpdb->get_row("SHOW COLUMNS FROM {$table} LIKE 'frecventa'");
+        $frec_is_enum= $frec_col && stripos($frec_col->Type, 'enum') !== false;
 
-    // Dacă tot ce avem nevoie e deja la zi, ieșim rapid.
-    if ($has_risc && !$sit_is_enum && !$frec_is_enum) return;
+        if ($has_risc && !$sit_is_enum && !$frec_is_enum) return;
 
-    if (function_exists('edu_alter_students_add_class_label'))     edu_alter_students_add_class_label();
-    if (function_exists('edu_alter_students_add_extended_fields')) edu_alter_students_add_extended_fields();
+        if (function_exists('edu_alter_students_add_class_label'))     edu_alter_students_add_class_label();
+        if (function_exists('edu_alter_students_add_extended_fields')) edu_alter_students_add_extended_fields();
+    } catch (\Throwable $e) {
+        // Nu lăsăm o eroare de migrare să blocheze adminul.
+        if (defined('WP_DEBUG') && WP_DEBUG) error_log('[edu_ensure_students_extended_schema] '.$e->getMessage());
+    }
 }
 
 /**
  * Self-heal pentru FK-urile de pe wp_edu_schools — pe instalațiile cu prefix custom
  * (ex: wpif_) FK-ul vechi poate ținti spre `wp_edu_cities` (prefixul implicit).
- * Verificăm o dată per request și ștergem orice FK greșit; acțiunea e
- * idempotentă (dacă nu există FK greșit, nu face nimic).
+ * Idempotent; rulăm doar din admin ca să nu lockam tabela în request-uri publice.
  */
 add_action('admin_init', 'edu_ensure_schools_fk_aligned');
-add_action('init',       'edu_ensure_schools_fk_aligned');
 function edu_ensure_schools_fk_aligned() {
     static $done = false;
     if ($done) return;
     $done = true;
-    if (function_exists('edu_schools_fix_foreign_keys')) {
-        edu_schools_fix_foreign_keys();
+    try {
+        if (function_exists('edu_schools_fix_foreign_keys')) {
+            edu_schools_fix_foreign_keys();
+        }
+    } catch (\Throwable $e) {
+        if (defined('WP_DEBUG') && WP_DEBUG) error_log('[edu_ensure_schools_fk_aligned] '.$e->getMessage());
     }
 }
 
