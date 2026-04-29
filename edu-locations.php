@@ -96,6 +96,23 @@ function edu_ensure_students_extended_schema() {
 }
 
 /**
+ * Self-heal pentru FK-urile de pe wp_edu_schools — pe instalațiile cu prefix custom
+ * (ex: wpif_) FK-ul vechi poate ținti spre `wp_edu_cities` (prefixul implicit).
+ * Verificăm o dată per request și ștergem orice FK greșit; acțiunea e
+ * idempotentă (dacă nu există FK greșit, nu face nimic).
+ */
+add_action('admin_init', 'edu_ensure_schools_fk_aligned');
+add_action('init',       'edu_ensure_schools_fk_aligned');
+function edu_ensure_schools_fk_aligned() {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    if (function_exists('edu_schools_fix_foreign_keys')) {
+        edu_schools_fix_foreign_keys();
+    }
+}
+
+/**
  * Admin assets loader — extins să includă și noile pagini
  */
 add_action('admin_enqueue_scripts', function ($hook) {

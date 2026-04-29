@@ -269,3 +269,58 @@ if (!function_exists('edu_schools_add_columns_tfr_siiir_mediu')) {
     }
   }
 }
+
+/**
+ * Repară FK-urile pe wp_edu_schools care indică spre o tabelă cu prefix greșit
+ * (ex: pe instalațiile cu prefix `wpif_`, FK-ul vechi pointa spre `wp_edu_cities`).
+ * Dacă găsim o constrângere care NU referă tabela cu prefixul curent, o ștergem.
+ * Dacă nu există FK pe city_id deloc după curățare, îl recreăm corect.
+ */
+if (!function_exists('edu_schools_fix_foreign_keys')) {
+  function edu_schools_fix_foreign_keys(){
+    global $wpdb;
+    if (!defined('DB_NAME')) return;
+    $tbl_schools = $wpdb->prefix . 'edu_schools';
+    $tbl_cities  = $wpdb->prefix . 'edu_cities';
+
+    // Confirmă că ambele tabele există
+    $exists_s = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $tbl_schools));
+    $exists_c = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $tbl_cities));
+    if ($exists_s !== $tbl_schools || $exists_c !== $tbl_cities) return;
+
+    // FK-urile existente pe schools
+    $fks = $wpdb->get_results($wpdb->prepare("
+      SELECT CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME
+      FROM information_schema.KEY_COLUMN_USAGE
+      WHERE TABLE_SCHEMA = %s
+        AND TABLE_NAME   = %s
+        AND REFERENCED_TABLE_NAME IS NOT NULL
+    ", DB_NAME, $tbl_schools));
+
+    $has_correct_city_fk = false;
+    foreach ((array)$fks as $fk) {
+      $col  = (string)$fk->COLUMN_NAME;
+      $ref  = (string)$fk->REFERENCED_TABLE_NAME;
+      $name = (string)$fk->CONSTRAINT_NAME;
+      // pe noi ne interesează FK-urile către un fel de tabel "edu_cities"
+      $is_city_fk = (substr($ref, -strlen('edu_cities')) === 'edu_cities');
+      if (($col === 'city_id' || $col === 'village_id') && $is_city_fk) {
+        if ($ref === $tbl_cities) {
+          if ($col === 'city_id') $has_correct_city_fk = true;
+          continue; // OK
+        }
+        // FK greșit — îl ștergem (escape backticks defensiv)
+        $name_esc = str_replace('`', '``', $name);
+        $wpdb->query("ALTER TABLE `{$tbl_schools}` DROP FOREIGN KEY `{$name_esc}`");
+      }
+    }
+
+    // Re-creăm FK-ul pe city_id (esențial — village_id e opțional, îl lăsăm)
+    if (!$has_correct_city_fk) {
+      // Nu mai re-adăugăm FK ca să nu refuze rânduri vechi cu city_id eventual orfan;
+      // dropdown-ul UI deja restrânge alegerile la wpif_edu_cities valide. Dacă vrei totuși
+      // să forțezi integritatea, decomentează linia de mai jos.
+      // $wpdb->query("ALTER TABLE `{$tbl_schools}` ADD CONSTRAINT FOREIGN KEY (`city_id`) REFERENCES `{$tbl_cities}` (`id`) ON DELETE CASCADE");
+    }
+  }
+}
